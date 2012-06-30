@@ -4,48 +4,74 @@
 # See LICENSE for details.
 
 from twisted.cred import portal, checkers
+from twisted.cred.error import UnauthorizedLogin
 from twisted.conch import error, avatar
 from twisted.conch.checkers import SSHPublicKeyDatabase
 from twisted.conch.ssh import factory, userauth, connection, keys, session
 from twisted.internet import reactor, protocol, defer
-from twisted.python import log
+from twisted.python import log, failure
 from zope.interface import implements
 import os
 import sys
 log.startLogging(sys.stderr)
 
-"""
-Example of running another protocol over an SSH channel.
-log in with username "user" and password "password".
-"""
+class RepoACL(SSHPublicKeyDatabase):
+    ACL = {
+        "25:25:85:78:31:f7:6e:46:04:9a:08:9b:8a:11:5c:a7": ["code"]
+    }
 
-class ExampleAvatar(avatar.ConchUser):
+    def requestAvatarId(self, credentials):
+        fingerprint = keys.Key.fromString(data=credentials.blob).fingerprint()
+        repos       = self.ACL[fingerprint]
 
-    def __init__(self, username):
-        avatar.ConchUser.__init__(self)
-        self.username = username
-        self.channelLookup.update({'session':session.SSHSession})
+        if not repos:
+            return failure.Failure(UnauthorizedLogin(fingerprint))
+        return (fingerprint, repos)
 
-class ExampleRealm:
+class GitRealm:
     implements(portal.IRealm)
 
     def requestAvatar(self, avatarId, mind, *interfaces):
-        return interfaces[0], ExampleAvatar(avatarId), lambda: None
+        return interfaces[0], GitUser(avatarId), lambda: None
 
-class EchoProtocol(protocol.Protocol):
-    """this is our example protocol that we will run over SSH
-    """
-    def dataReceived(self, data):
-        if data == '\r':
-            data = '\r\n'
-        elif data == '\x03': #^C
-            self.transport.loseConnection()
-            return
-        self.transport.write(data)
+class GitUser(avatar.ConchUser):
+    def __init__(self, acl):
+        avatar.ConchUser.__init__(self)
+        self.fingerprint, self.repos = acl
+        self.channelLookup.update({ "session": session.SSHSession })
 
-publicKey = 'ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAGEArzJx8OYOnJmzf4tfBEvLi8DVPrJ3/c9k2I/Az64fxjHf9imyRJbixtQhlH9lfNjUIx+4LmrJH5QNRsFporcHDKOTwTTYLh5KmRpslkYHRivcJSkbh/C+BR3utDS555mV'
+class GitSession:    
+    def __init__(self, avatar):
+        pass
 
-privateKey = """-----BEGIN RSA PRIVATE KEY-----
+    def execCommand(self, proto, cmd):
+        print cmd
+        raise Exception("no executing commands")
+
+    def getPty(self, term, windowSize, attrs):
+        raise Exception("no ptys")
+
+    def openShell(self, trans):
+        raise Exception("no shells")
+
+    def eofReceived(self):
+        pass
+
+    def closed(self):
+        pass
+
+from twisted.python import components
+components.registerAdapter(GitSession, GitUser, session.ISession)
+
+class ExampleFactory(factory.SSHFactory):
+    publicKeys = {
+        "ssh-rsa": keys.Key.fromString(
+            data="ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAGEArzJx8OYOnJmzf4tfBEvLi8DVPrJ3/c9k2I/Az64fxjHf9imyRJbixtQhlH9lfNjUIx+4LmrJH5QNRsFporcHDKOTwTTYLh5KmRpslkYHRivcJSkbh/C+BR3utDS555mV"
+        )
+    }
+    privateKeys = {
+        "ssh-rsa": keys.Key.fromString(
+            data="""-----BEGIN RSA PRIVATE KEY-----
 MIIByAIBAAJhAK8ycfDmDpyZs3+LXwRLy4vA1T6yd/3PZNiPwM+uH8Yx3/YpskSW
 4sbUIZR/ZXzY1CMfuC5qyR+UDUbBaaK3Bwyjk8E02C4eSpkabJZGB0Yr3CUpG4fw
 vgUd7rQ0ueeZlQIBIwJgbh+1VZfr7WftK5lu7MHtqE1S1vPWZQYE3+VUn8yJADyb
@@ -57,60 +83,15 @@ DZttmYJeEfiFBBavVYIF1dOlZT0G8jMCMBc7sOSZodFnAiryP+Qg9otSBjJ3bQML
 pSTqy7c3a2AScC/YyOwkDaICHnnD3XyjMwIxALRzl0tQEKMXs6hH8ToUdlLROCrP
 EhQ0wahUTCk1gKA4uPD6TMTChavbh4K63OvbKg==
 -----END RSA PRIVATE KEY-----"""
-
-
-class InMemoryPublicKeyChecker(SSHPublicKeyDatabase):
-
-    def checkKey(self, credentials):
-        return credentials.username == 'user' and \
-            keys.Key.fromString(data=publicKey).blob() == credentials.blob
-
-class ExampleSession:
-    
-    def __init__(self, avatar):
-        """
-        We don't use it, but the adapter is passed the avatar as its first
-        argument.
-        """
-
-    def getPty(self, term, windowSize, attrs):
-        pass
-    
-    def execCommand(self, proto, cmd):
-        raise Exception("no executing commands")
-
-    def openShell(self, trans):
-        ep = EchoProtocol()
-        ep.makeConnection(trans)
-        trans.makeConnection(session.wrapProtocol(ep))
-
-    def eofReceived(self):
-        pass
-
-    def closed(self):
-        pass
-
-from twisted.python import components
-components.registerAdapter(ExampleSession, ExampleAvatar, session.ISession)
-
-class ExampleFactory(factory.SSHFactory):
-    publicKeys = {
-        'ssh-rsa': keys.Key.fromString(data=publicKey)
-    }
-    privateKeys = {
-        'ssh-rsa': keys.Key.fromString(data=privateKey)
+        )
     }
     services = {
-        'ssh-userauth': userauth.SSHUserAuthServer,
-        'ssh-connection': connection.SSHConnection
+        "ssh-userauth":     userauth.SSHUserAuthServer,
+        "ssh-connection":   connection.SSHConnection
     }
-    
 
-portal = portal.Portal(ExampleRealm())
-passwdDB = checkers.InMemoryUsernamePasswordDatabaseDontUse()
-passwdDB.addUser('user', 'password')
-portal.registerChecker(passwdDB)
-portal.registerChecker(InMemoryPublicKeyChecker())
+portal = portal.Portal(GitRealm())
+portal.registerChecker(RepoACL())
 ExampleFactory.portal = portal
 
 def main():
