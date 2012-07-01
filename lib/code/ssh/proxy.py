@@ -1,9 +1,16 @@
 #!/usr/bin/env python
 
+import base64
 import os
 import re
 import sys
+import urllib
+from urlparse import urlparse
+from twisted.cred.error import UnauthorizedLogin
+from twisted.internet import reactor
 from twisted.python import failure, log
+from twisted.web.client import Agent
+from twisted.web.http_headers import Headers
 
 from code.ssh import base
 
@@ -15,13 +22,36 @@ class Server(base.Server):
     def __init__(self):
         super(Server, self).__init__()
 
-    def requestUsername(self, key):
-        fingerprint = key.fingerprint()
-        repos       = self.ACL[fingerprint]
+    def _cbRequestUsername(self, response, fingerprint):
+        print response.code
+        if response.code == 200:
+            return fingerprint
+        else:
+            return failure.Failure(UnauthorizedLogin("%s not authorized" % fingerprint))
 
-        if not repos:
-            return failure.Failure(UnauthorizedLogin(fingerprint))
-        return (fingerprint, repos)
+    def requestUsername(self, key):
+        """
+        Make a request to the Compiler API to verify that the fingerprint has basic access.
+        """
+        fingerprint = key.fingerprint()
+
+        url = urlparse(os.environ.get("COMPILER_API_URL"))
+        api_key = url.password
+        api_url = "%s://%s:%s%s" % (url.scheme, url.hostname, url.port, url.path)
+
+        auth = base64.b64encode("%s:%s" % (urllib.quote(fingerprint), api_key))
+
+        agent = Agent(reactor)
+        d = agent.request("GET", api_url,
+            Headers({
+                "Authorization":    ["Basic %s" % auth],
+                "User-Agent":       ["SSH Proxy"]
+            }),
+          None
+        )
+
+        d.addCallback(self._cbRequestUsername, fingerprint)    
+        return d
 
     def validateCommand(self, username, argv):
         fingerprint, repos = username
