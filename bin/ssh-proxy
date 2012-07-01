@@ -9,5 +9,5 @@ sys.path.insert(0,
   )
 )
 
-from code import ssh_proxy
-ssh_proxy.main()
+from code.ssh import proxy
+proxy.main()
