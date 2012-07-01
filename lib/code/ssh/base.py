@@ -92,6 +92,12 @@ class Server(object):
     @staticmethod
     def requestAvatarId(self, credentials):
         key = keys.Key.fromString(data=credentials.blob)
+
+        if not credentials.signature:
+          return failure.Failure(error.ValidPublicKey())
+        if not keys.Key.verify(key, credentials.signature, credentials.sigData):
+          return failure.Failure(error.ConchError("Incorrect signature"))
+
         return self.requestUsername(key)
 
     def onStart(self):
