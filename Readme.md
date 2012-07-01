@@ -1,10 +1,10 @@
 # Codon
 
-## bin/http_proxy
+## bin/http-proxy
 
-## bin/http_compiler
+## bin/http-compiler
 
-## bin/ssh_proxy
+## bin/ssh-proxy
 
 SSH Proxy is an server that receives a `git push` SSH connection, composed of a SSH fingerprint and command. The allowed commands are either:
 
@@ -13,7 +13,7 @@ SSH Proxy is an server that receives a `git push` SSH connection, composed of a 
 
 The SSH fingerprint and repository name are presented to a Director service, which returns a one-time-use SSH key, hostname and port of a compiler container, which Proxy forwards the connection to.
 
-## bin/ssh_compiler
+## bin/ssh-compiler
 
 SSH Compiler is an SSH server inside a container for untrusted code compilation in git hooks. The only environment it has is:
 
