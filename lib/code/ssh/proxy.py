@@ -2,7 +2,6 @@
 
 import os
 import re
-import shlex
 import sys
 from twisted.python import failure, log
 
@@ -24,14 +23,10 @@ class Server(base.Server):
             return failure.Failure(UnauthorizedLogin(fingerprint))
         return (fingerprint, repos)
 
-    def validateCommand(self, username, cmd):
+    def validateCommand(self, username, argv):
         fingerprint, repos = username
 
         # validate `git-upload-pack '/myrepo.git'` cmd
-        lexer = shlex.shlex(cmd)
-        lexer.whitespace_split = True
-        argv = [s for s in lexer]
-
         if len(argv) != 2:
             raise Exception("Invalid command")
 

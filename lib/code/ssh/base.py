@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-# Copyright (c) Noah Zoschke
-# MIT license
+import os
+import shlex
+import sys
 
 from twisted.cred import portal, checkers
 from twisted.cred.error import UnauthorizedLogin
@@ -11,10 +12,6 @@ from twisted.conch.ssh import factory, userauth, connection, keys, session
 from twisted.internet import reactor, protocol, defer
 from twisted.python import components, failure, log
 from zope.interface import implements
-import os
-import re
-import shlex
-import sys
 
 log.startLogging(sys.stderr)
 
@@ -105,7 +102,11 @@ class Server(object):
 
     @staticmethod
     def execCommand(self, proto, cmd):
-        self.validateCommand(self.user.username, cmd)
+        lexer = shlex.shlex(cmd)
+        lexer.whitespace_split = True
+        argv = [s for s in lexer]
+
+        self.validateCommand(self.user.username, argv)
         return self.spawnProcess(proto, cmd)
 
     def validateCommand(self, user, cmd):
