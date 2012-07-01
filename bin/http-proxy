@@ -2,20 +2,20 @@
 
 $:.unshift(
   File.expand_path(
-    File.join(__FILE__, "..", "..")
+    File.join(__FILE__, "..", "..", "lib")
   )
 )
 
 require "unicorn"
-require "code/api/director"
+require "code/api/compiler"
 require "code/api/proxy"
 
 app = Rack::Builder.new {
   use Rack::CommonLogger
   use Rack::ShowExceptions
 
-  map "/"         { run Code::API::Proxy }
-  map "/compiler" { run Code::API::Compiler }
+  map("/")         { run Code::API::Proxy }
+  map("/compiler") { run Code::API::Compiler }
 }
 
 opts = {

@@ -28,10 +28,10 @@ Upon receiving a connection, the compiler will download and extract the git bund
 
 If the command is `git-receive-pack`, the compiler will install a `pre_receive` hook to download and extract the build cache at CACHE_GET_URL, run a buildpack, then store 
 
-## API::Director
+## API::Compiler
   
     curl -H "Accept: application/json" \
-      -u :$SSH_FINGERPRINT \
+      -u $SSH_FINGERPRINT:$API_KEY \
       -X POST https://code.heroku.com/compiler/:repository
 
     HTTP/1.1 200 OK
