@@ -28,13 +28,9 @@ module Code
           return false unless @auth.provided? && @auth.basic? && @auth.credentials
           return false unless @auth.credentials[1] == COMPILER_API_KEY
 
-          # check that basic auth username is a valid [fingerprint, repository] pair
+          # check that basic auth username is a valid fingerprint
           @fingerprint = CGI::unescape(@auth.credentials[0])
-          if acl = ACLS[@fingerprint]
-            return acl.include?(params["repository"])
-          end
-
-          return false
+          !!ACLS[@fingerprint]
         end
 
         def redis
@@ -42,33 +38,46 @@ module Code
         end
       end
 
+      get "/" do
+        protected!
+        "ok"
+      end
+
       post "/:repository" do
         protected!
+        throw(:halt, [404, "Not found\n"]) unless ACLS[@fingerprint].include?(params["repository"])
 
-        uuid = "%08x" % rand(2**64) # fast per-request unique id
-        queue = "compiler.session.#{uuid}"
-  
+        uuid      = "%08x" % rand(2**64) # fast per-request unique id
+        key       = "compiler.session.#{uuid}"
+        reply_key = "#{key}.reply"
+
+        redis.set     key, request.ip
+        redis.expire  key, COMPILER_REPLY_TIMEOUT
+
         Process.fork do
           sleep 1
           `curl -s -X PUT http://localhost:5000/compiler/session/#{uuid} -d "hostname=localhost"`
         end
 
-        k, v = redis.blpop(queue, COMPILER_REPLY_TIMEOUT)
+        k, v = redis.brpop reply_key, COMPILER_REPLY_TIMEOUT
         if v
           data = JSON.parse(v)
           "hello #{@fingerprint}, here is your #{params["repository"]}: #{data}\n"
         else
           status 503
-          "Backend did not respond"
+          "No compiler available\n"
         end
       end
 
       put "/session/:uuid" do
-        queue = "compiler.session.#{params["uuid"]}"
+        key       = "compiler.session.#{params["uuid"]}"
+        reply_key = "#{key}.reply"
+
+        throw(:halt, [404, "Not found\n"]) unless redis.exists(key)
 
         data = params.select { |k, v| ["hostname", "port", "public_key"].include?(k) }
-        redis.rpush(queue, JSON.dump(data))
-        redis.expire(queue, COMPILER_REPLY_TIMEOUT)
+        redis.rpush   reply_key, JSON.dump(data)
+        redis.expire  reply_key, COMPILER_REPLY_TIMEOUT
       end
     end
   end
