@@ -1,0 +1,28 @@
+#!/usr/bin/env ruby
+
+$:.unshift(
+  File.expand_path(
+    File.join(__FILE__, "..", "..")
+  )
+)
+
+require "unicorn"
+require "code/api/director"
+require "code/api/proxy"
+
+app = Rack::Builder.new {
+  use Rack::CommonLogger
+  use Rack::ShowExceptions
+
+  map "/"         { run Code::API::Proxy }
+  map "/compiler" { run Code::API::Compiler }
+}
+
+opts = {
+  before_fork:      ->(s,w) { },
+  listeners:        "0.0.0.0:#{ENV["PORT"] || 5000}",
+  timeout:          1800,
+  worker_processes: 4
+}
+
+Unicorn::HttpServer.new(app, opts).start.join
