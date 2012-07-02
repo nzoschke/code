@@ -7,7 +7,7 @@ import sys
 import urllib
 from urlparse import urlparse
 from twisted.cred.error import UnauthorizedLogin
-from twisted.internet import reactor
+from twisted.internet import defer, reactor
 from twisted.python import failure, log
 from twisted.web.client import Agent
 from twisted.web.http_headers import Headers
@@ -22,10 +22,17 @@ class Server(base.Server):
     def __init__(self):
         super(Server, self).__init__()
 
+        url = urlparse(os.environ.get("COMPILER_API_URL"))
+        self.api_key = url.password
+        self.api_url = "%s://%s:%s%s" % (url.scheme, url.hostname, url.port, url.path)
+
+    def authHeader(self, fingerprint):
+        auth = base64.b64encode("%s:%s" % (urllib.quote(fingerprint), self.api_key))
+        return "Basic %s" % auth
+
     def _cbRequestUsername(self, response, fingerprint):
-        print response.code
         if response.code == 200:
-            return fingerprint
+            return (fingerprint, [])
         else:
             return failure.Failure(UnauthorizedLogin("%s not authorized" % fingerprint))
 
@@ -35,25 +42,19 @@ class Server(base.Server):
         """
         fingerprint = key.fingerprint()
 
-        url = urlparse(os.environ.get("COMPILER_API_URL"))
-        api_key = url.password
-        api_url = "%s://%s:%s%s" % (url.scheme, url.hostname, url.port, url.path)
-
-        auth = base64.b64encode("%s:%s" % (urllib.quote(fingerprint), api_key))
-
         agent = Agent(reactor)
-        d = agent.request("GET", api_url,
+        d = agent.request("GET", self.api_url,
             Headers({
-                "Authorization":    ["Basic %s" % auth],
+                "Authorization":    [self.authHeader(fingerprint)],
                 "User-Agent":       ["SSH Proxy"]
             }),
           None
         )
 
-        d.addCallback(self._cbRequestUsername, fingerprint)    
+        d.addCallback(self._cbRequestUsername, fingerprint)
         return d
 
-    def validateCommand(self, username, argv):
+    def spawnProcess(self, proto, username, argv):
         fingerprint, repos = username
 
         # validate `git-upload-pack '/myrepo.git'` cmd
@@ -67,12 +68,11 @@ class Server(base.Server):
 
         # malformed or non shell safe path
         if not m:
-            raise Exception("Invalid path")
+            raise Exception("Invalid command")
 
-        # not in ACL for SSH fingerprint
-        if m.group(1) not in repos:
-            raise Exception("Invalid path")
+        process = reactor.spawnProcess(proto, argv[0], argv, env={
+            "SSH_ORIGINAL_COMMAND": " ".join(argv), 
+            "PATH":                 os.environ["PATH"]
+        })
 
-    def spawnProcess(self, proto, cmd):
-        print self, proto, cmd
-        #self.process = reactor.spawnProcess(proto, self.command[0], self.command, env={'SSH_ORIGINAL_COMMAND': cmd, 'PATH': os.environ['PATH'], 'INSTANCE_NAME': os.environ['INSTANCE_NAME']})
+        print "codon ssh-proxy fn=spawnProcess fingerprint=%s argv=\"%s\" pid=%i" % (fingerprint, " ".join(argv), process.pid)

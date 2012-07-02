@@ -81,7 +81,6 @@ class Server(object):
         self.KeyChecker.requestAvatarId     = self.requestAvatarId
         self.KeyChecker.requestUsername     = self.requestUsername
         self.SSHSession.execCommand         = self.execCommand
-        self.SSHSession.validateCommand     = self.validateCommand
         self.SSHSession.spawnProcess        = self.spawnProcess
 
     @staticmethod
@@ -112,14 +111,10 @@ class Server(object):
         lexer.whitespace_split = True
         argv = [s for s in lexer]
 
-        self.validateCommand(self.user.username, argv)
-        return self.spawnProcess(proto, cmd)
+        return self.spawnProcess(proto, self.user.username, argv)
 
-    def validateCommand(self, user, cmd):
-        raise Exception("Invalid command %s" % cmd)
-
-    def spawnProcess(self, proto, cmd):
-        pass
+    def spawnProcess(self, proto, username, argv):
+        raise Exception("Commands disabled")
 
     def run(self):
         components.registerAdapter(self.SSHSession, self.User, session.ISession)
