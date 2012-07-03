@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import urllib
+import urllib2
 from urlparse import urlparse
 from twisted.cred.error import UnauthorizedLogin
 from twisted.internet import defer, reactor
@@ -32,7 +33,7 @@ class Server(base.Server):
 
     def _cbRequestUsername(self, response, fingerprint):
         if response.code == 200:
-            return (fingerprint, [])
+            return fingerprint
         else:
             return failure.Failure(UnauthorizedLogin("%s not authorized" % fingerprint))
 
@@ -55,24 +56,34 @@ class Server(base.Server):
         return d
 
     def spawnProcess(self, proto, username, argv):
-        fingerprint, repos = username
-
         # validate `git-upload-pack '/myrepo.git'` cmd
         if len(argv) != 2:
             raise Exception("Invalid command")
 
         if argv[0] not in ["git-upload-pack", "git-receive-pack"]:
             raise Exception("Invalid command")
-            
-        m = re.match(r"'/([a-z0-9-]+).git'", argv[1])
 
-        # malformed or non shell safe path
+        # check malformed or non shell safe path            
+        m = re.match(r"^'/([a-z0-9-]+).git'$", argv[1])
         if not m:
-            raise Exception("Invalid command")
+            raise Exception("Invalid path")
+
+        # TODO: implement non-blocking request
+        repository = m.group(1)
+        req = urllib2.Request(
+            "%s/%s" % (self.api_url, repository),
+            "{}",
+            {"Authorization": self.authHeader(username)}
+        )
+
+        try:
+            response = urllib2.urlopen(req)
+        except urllib2.HTTPError, e:
+            print "codon ssh-proxy fn=spawnProcess at=error username=%s argv=\"%s\" code=%i" % (username, " ".join(argv), e.code)
+            raise Exception("Invalid path")
 
         process = reactor.spawnProcess(proto, argv[0], argv, env={
             "SSH_ORIGINAL_COMMAND": " ".join(argv), 
             "PATH":                 os.environ["PATH"]
         })
-
-        print "codon ssh-proxy fn=spawnProcess fingerprint=%s argv=\"%s\" pid=%i" % (fingerprint, " ".join(argv), process.pid)
+        print "codon ssh-proxy fn=spawnProcess username=%s argv=\"%s\" pid=%i" % (username, " ".join(argv), process.pid)
