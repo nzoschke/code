@@ -3,7 +3,10 @@
 import base64
 import os
 import re
+import shutil
+from string import Template
 import sys
+import tempfile
 import urllib
 import urllib2
 from urlparse import urlparse
@@ -64,13 +67,38 @@ class Server(base.Server):
         if not m:
             raise Exception("Invalid path")
 
+        # make session temp dir and write curl/ssh config files
+        session_dir = tempfile.mkdtemp()
+        template_dir = "etc/session/"
+        print session_dir
+
+        settings = {
+            "api_url":      self.api_url,
+            "auth_header":  self.authHeader(username),
+            "path":         m.group(1),
+            "session_dir":  session_dir,
+        }
+
+        for l in os.listdir(template_dir):
+            conf = ""
+            src  = os.path.join(template_dir, l)
+            dest = os.path.join(session_dir,  l)
+
+            with open(src, "r") as f:
+                conf = f.read()
+                if src.endswith(".conf"):
+                    conf = Template(conf).substitute(settings)
+
+            with open(dest, "w") as f:
+                f.write(conf)
+                if src.endswith(".sh"):
+                    os.chmod(dest, 0700)
+
         # spawn subprocess wrapper to HTTP request a compiler, then forward
         # child stderr mapped to parent stdout for logging
-        argv.insert(0, "./bin/ssh-forward.sh")
+        argv.insert(0, "./ssh-forward.sh")
         process = reactor.spawnProcess(proto, argv[0], argv,
-            env={
-                "API_URL":          "%s/%s" % (self.api_url, m.group(1)),
-                "AUTHORIZATION":    self.authHeader(username),
-            },
+            env={"PATH": os.environ["PATH"]},
+            path=session_dir,
             childFDs={0:"w", 1:"r", 2:2}
         )
