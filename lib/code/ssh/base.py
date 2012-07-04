@@ -80,7 +80,10 @@ class Server(object):
         self.SSHFactory.onStart             = self.onStart
         self.KeyChecker.requestAvatarId     = self.requestAvatarId
         self.KeyChecker.requestUsername     = self.requestUsername
+        self.SSHSession.closed              = self.closed
+        self.SSHSession.eofReceived         = self.eofReceived
         self.SSHSession.execCommand         = self.execCommand
+        self.SSHSession.onClose             = self.onClose
         self.SSHSession.spawnProcess        = self.spawnProcess
 
     @staticmethod
@@ -115,6 +118,17 @@ class Server(object):
 
     def spawnProcess(self, proto, username, argv):
         raise Exception("Commands disabled")
+
+    @staticmethod
+    def eofReceived(self):
+        return self.onClose()
+
+    @staticmethod
+    def closed(self):
+        return self.onClose()
+
+    def onClose(self):
+        pass
 
     def run(self, port=5022):
         components.registerAdapter(self.SSHSession, self.User, session.ISession)
