@@ -1,46 +1,57 @@
-from Crypto.PublicKey import RSA
-from twisted.conch.ssh.keys import Key
+import os
+import socket
+import sys
+import urllib
+from twisted.conch.ssh import keys
+from twisted.cred.error import UnauthorizedLogin
+from twisted.internet import reactor
+from twisted.python import failure, log
+from twisted.web.client import Agent
+from twisted.web.http_headers import Headers
 
-class Proxy(SSH):
-  def __init__(self):
-    url = urlparse(os.environ.get("COMPILER_API_URL"))
-    self.api_key = url.password
-    self.api_url = "%s://%s:%s%s" % (url.scheme, url.hostname, url.port, url.path)
-    self.key     = os.environ.get("SSH_PRIVATE_KEY")
+from code.ssh import base
 
-  def requestUser(self, key):
-    # GET Compiler API
-      fingerprint = keys.Key.fromString(data=credentials.blob).fingerprint()
-      f = urllib.quote(fingerprint)
-      auth = base64.encodestring("%s:%s" % os.environ['GITPROXY_API_PASSWORD']).rstrip()
+class Server(base.Server):
+    def __init__(self):
+        super(Server, self).__init__()
 
-      agent = Agent(reactor)
-      d = agent.request(
-        "GET",
-        "%s/compiler" % self.api_url
-        Headers({'Authorization': ["Basic %s" % CORE_AUTH]}),
-        None)
-      d.addCallback(self._cbRequestAvatarId, fingerprint)    
-      return d
+        self.callback_url = os.environ["CALLBACK_URL"]
+        self.hostname     = socket.gethostbyname(socket.gethostname())
+        self.port         = os.environ["PORT"]
+        self.ssh_pub_key  = os.environ["SSH_PUB_KEY"]
 
-    pass
+    def _cbOnStart(self, response):
+        if response.code != 200:
+            raise Exception("Invalid session")
 
-  def execCommand(self, proto, cmd):
-    # POST path to Compiler/:repository API
-    pass
+    def onStart(self):
+        qs = urllib.urlencode({
+            "hostname": self.hostname,
+            "port":     self.port,
+        })
 
-class Compiler(SSH):
-  def __init__(self):
-    self.key        = RSA.generate(2048) # generate one-time-use key
-    self.public_key = Key(key).public().toString("OPENSSH")
+        agent = Agent(reactor)
+        url = "%s?%s" % (self.callback_url, qs)
+        d = agent.request("PUT", url,
+            Headers({
+                "User-Agent": ["SSH Compiler"]
+            }),
+          None
+        )
 
-  def onStart(self):
-    # PUT public_key, hostname and port to session callback_url
-    pass
+        d.addCallback(self._cbOnStart)
+        return d
 
-  def requestUser(self, key, reactor):
-    # compare keys
-    return key.fingerprint()
+    def requestUsername(self, key):
+        if keys.Key.fromString(data=self.ssh_pub_key) == key:
+          return key.fingerprint()
+        else:
+            return failure.Failure(UnauthorizedLogin("Not authorized"))
 
-  def execCommand(self, proto, cmd):
-    pass
+    def spawnProcess(self, proto, username, argv):
+        process = reactor.spawnProcess(proto, "echo", ["echo", "hello compiler!"],
+            env={"PATH": os.environ["PATH"]},
+        )
+
+    def onClose(self):
+        reactor.stop()
