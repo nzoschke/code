@@ -12,9 +12,8 @@ function log() {
 }
 
 log fn=setup
-ssh-keygen -f id_rsa -N "" >&2
+ssh-keygen -f id_rsa -N "" >&2          # TODO: move keygen to server for security?
 HTTP_CODE=$(curl -K curl_setup.conf)
-rm id_rsa                               # shred private key as soon as possible
 log fn=setup code=$HTTP_CODE
 
 [[ $HTTP_CODE == 200 ]] || { echo "invalid path"; exit 1; }
