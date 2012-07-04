@@ -116,13 +116,12 @@ class Server(object):
     def spawnProcess(self, proto, username, argv):
         raise Exception("Commands disabled")
 
-    def run(self):
+    def run(self, port=5022):
         components.registerAdapter(self.SSHSession, self.User, session.ISession)
 
         p = portal.Portal(self.SSHRealm())
         p.registerChecker(self.KeyChecker())
         self.SSHFactory.portal = p
 
-        port = int(os.environ.get("PORT", 5022))
-        reactor.listenTCP(5022, self.SSHFactory())
+        reactor.listenTCP(int(port), self.SSHFactory())
         reactor.run()

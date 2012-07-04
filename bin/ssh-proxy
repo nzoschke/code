@@ -9,4 +9,4 @@ sys.path.insert(0,
 )
 
 from code.ssh import proxy
-proxy.Server().run()
+proxy.Server().run(port=os.environ.get("PORT"))
