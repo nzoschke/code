@@ -47,18 +47,35 @@ module Code
         protected!
         throw(:halt, [404, "Not found\n"]) unless ACLS[@fingerprint].include?(params["repository"])
 
-        uuid      = "%08x" % rand(2**64) # fast per-request unique id
-        key       = "compiler.session.#{uuid}"
+        xid       = "%08x" % rand(2**64) # fast per-request unique id
+        key       = "compiler.session.#{xid}"
         reply_key = "#{key}.reply"
 
         redis.set     key, request.ip
         redis.expire  key, COMPILER_REPLY_TIMEOUT
 
-        Process.fork do
-          sleep 1
-          `curl -s -X PUT http://localhost:5000/compiler/session/#{uuid} -d "hostname=localhost"`
-        end
+        # fork ssh-compiler process
+        # can be securely implemented via a `heroku run` API call
+        env = {
+          "BUILD_CALLBACK_URL"  => "",
+          "BUILD_PUT_URL"       => "",
+          "CACHE_GET_URL"       => "",
+          "CACHE_PUT_URL"       => "",
+          "CALLBACK_URL"        => "http://localhost:5000/compiler/session/#{xid}",
+          "PORT"                => "6022",
+          "SSH_PUB_KEY"         => params["ssh_pub_key"][:tempfile].read,
+          "REPO_GET_URL"        => "",
+          "REPO_PUT_URL"        => "",
+        }
 
+        env.merge!({
+          "PATH"        => ENV["PATH"],
+          "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
+        })
+        
+        pid = Process.spawn(env, "bin/ssh-compiler", unsetenv_others: true)
+
+        # wait for compiler callback
         k, v = redis.brpop reply_key, COMPILER_REPLY_TIMEOUT
         if v
           data = JSON.parse(v)
@@ -69,13 +86,13 @@ module Code
         end
       end
 
-      put "/session/:uuid" do
-        key       = "compiler.session.#{params["uuid"]}"
+      put "/session/:xid" do
+        key       = "compiler.session.#{params["xid"]}"
         reply_key = "#{key}.reply"
 
         throw(:halt, [404, "Not found\n"]) unless redis.exists(key)
 
-        data = params.select { |k, v| ["hostname", "port", "public_key"].include?(k) }
+        data = params.select { |k, v| ["hostname", "port"].include?(k) }
         redis.rpush   reply_key, JSON.dump(data)
         redis.expire  reply_key, COMPILER_REPLY_TIMEOUT
       end
