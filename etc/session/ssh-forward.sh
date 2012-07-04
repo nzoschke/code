@@ -19,8 +19,8 @@ log fn=setup code=$HTTP_CODE
 [[ $HTTP_CODE == 200 ]] || { echo "invalid path"; exit 1; }
 
 log fn=forward
-ssh localhost -F ssh.conf -i id_rsa -p 6022 -C "$@" | tee ssh.log
-#ssh -F ssh.conf | tee ssh.log
+cat ssh_host.conf >> ssh.conf             # append hostname/port config from Compiler API
+ssh -F ssh.conf -C "$@" | tee ssh.log
 log fn=forward code=${PIPESTATUS[0]}
 
 log fn=record

@@ -62,14 +62,15 @@ module Code
           "CACHE_GET_URL"       => "",
           "CACHE_PUT_URL"       => "",
           "CALLBACK_URL"        => "http://localhost:5000/compiler/session/#{xid}",
-          "PORT"                => "6022",
           "SSH_PUB_KEY"         => params["ssh_pub_key"][:tempfile].read,
           "REPO_GET_URL"        => "",
           "REPO_PUT_URL"        => "",
         }
 
+        # runtime environment
         env.merge!({
           "PATH"        => ENV["PATH"],
+          "PORT"        => (6000 + rand(100)).to_s,
           "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
         })
         
@@ -79,7 +80,7 @@ module Code
         k, v = redis.brpop reply_key, COMPILER_REPLY_TIMEOUT
         if v
           data = JSON.parse(v)
-          "hello #{@fingerprint}, here is your #{params["repository"]}: #{data}\n"
+          "HostName=#{data["hostname"]}\nPort=#{data["port"]}\n"
         else
           status 503
           "No compiler available\n"
