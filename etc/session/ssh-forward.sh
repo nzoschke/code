@@ -1,6 +1,12 @@
 #!/bin/bash
 set -x
 
+function _exit() {
+  tmp=$(pwd)
+  [[ "$tmp" == */tmp* ]] && rm -rf $tmp # only remove tmp-ish dirs
+}
+trap _exit EXIT
+
 function log() {
   echo app=codon file=ssh-forward.sh "$@" >&2
 }
@@ -8,10 +14,10 @@ function log() {
 log fn=setup
 ssh-keygen -f id_rsa -N "" >&2
 HTTP_CODE=$(curl -K curl_setup.conf)
-rm id_rsa # clean private key as soon as possible
+rm id_rsa                               # shred private key as soon as possible
 log fn=setup code=$HTTP_CODE
 
-[[ $HTTP_CODE == 200 ]] || exit 1
+[[ $HTTP_CODE == 200 ]] || { echo "invalid path"; exit 1; }
 
 log fn=forward
 ssh -F ssh.conf | tee ssh.log
