@@ -59,7 +59,7 @@ class Server(base.Server):
             raise Exception("Invalid command")
 
         # check malformed or non shell safe path            
-        m = re.match(r"^'/([a-z0-9-]+).git'$", argv[1])
+        m = re.match(r"^'/([a-z0-9_-]+).git'$", argv[1])
         if not m:
             raise Exception("Invalid path")
 
