@@ -1,17 +1,13 @@
-#!/usr/bin/env python
-
 import base64
 import os
 import re
-import shutil
 from string import Template
 import sys
 import tempfile
 import urllib
-import urllib2
 from urlparse import urlparse
 from twisted.cred.error import UnauthorizedLogin
-from twisted.internet import defer, reactor
+from twisted.internet import reactor
 from twisted.python import failure, log
 from twisted.web.client import Agent
 from twisted.web.http_headers import Headers
