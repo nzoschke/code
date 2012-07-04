@@ -16,10 +16,6 @@ from twisted.web.http_headers import Headers
 from code.ssh import base
 
 class Server(base.Server):
-    ACL = {
-        "25:25:85:78:31:f7:6e:46:04:9a:08:9b:8a:11:5c:a7": ["code", "gentle-snow-22"]
-    }
-
     def __init__(self):
         super(Server, self).__init__()
 
@@ -27,32 +23,32 @@ class Server(base.Server):
         self.api_key = url.password
         self.api_url = "%s://%s:%s%s" % (url.scheme, url.hostname, url.port, url.path)
 
-    def authHeader(self, fingerprint):
-        auth = base64.b64encode("%s:%s" % (urllib.quote(fingerprint), self.api_key))
+    def authHeader(self, username):
+        auth = base64.b64encode("%s:%s" % (urllib.quote(username), self.api_key))
         return "Basic %s" % auth
 
-    def _cbRequestUsername(self, response, fingerprint):
+    def _cbRequestUsername(self, response, username):
         if response.code == 200:
-            return fingerprint
+            return username
         else:
-            return failure.Failure(UnauthorizedLogin("%s not authorized" % fingerprint))
+            return failure.Failure(UnauthorizedLogin("%s not authorized" % username))
 
     def requestUsername(self, key):
         """
         Make a request to the Compiler API to verify that the fingerprint has basic access.
         """
-        fingerprint = key.fingerprint()
+        username = key.fingerprint()
 
         agent = Agent(reactor)
         d = agent.request("GET", self.api_url,
             Headers({
-                "Authorization":    [self.authHeader(fingerprint)],
+                "Authorization":    [self.authHeader(username)],
                 "User-Agent":       ["SSH Proxy"]
             }),
           None
         )
 
-        d.addCallback(self._cbRequestUsername, fingerprint)
+        d.addCallback(self._cbRequestUsername, username)
         return d
 
     def spawnProcess(self, proto, username, argv):
@@ -68,22 +64,13 @@ class Server(base.Server):
         if not m:
             raise Exception("Invalid path")
 
-        # TODO: implement non-blocking request
-        repository = m.group(1)
-        req = urllib2.Request(
-            "%s/%s" % (self.api_url, repository),
-            "{}",
-            {"Authorization": self.authHeader(username)}
+        # spawn subprocess wrapper to HTTP request a compiler, then forward
+        # child stderr mapped to parent stdout for logging
+        argv.insert(0, "./bin/ssh-forward.sh")
+        process = reactor.spawnProcess(proto, argv[0], argv,
+            env={
+                "API_URL":          "%s/%s" % (self.api_url, m.group(1)),
+                "AUTHORIZATION":    self.authHeader(username),
+            },
+            childFDs={0:"w", 1:"r", 2:2}
         )
-
-        try:
-            response = urllib2.urlopen(req)
-        except urllib2.HTTPError, e:
-            print "codon ssh-proxy fn=spawnProcess at=error username=%s argv=\"%s\" code=%i" % (username, " ".join(argv), e.code)
-            raise Exception("Invalid path")
-
-        process = reactor.spawnProcess(proto, argv[0], argv, env={
-            "SSH_ORIGINAL_COMMAND": " ".join(argv), 
-            "PATH":                 os.environ["PATH"]
-        })
-        print "codon ssh-proxy fn=spawnProcess username=%s argv=\"%s\" pid=%i" % (username, " ".join(argv), process.pid)

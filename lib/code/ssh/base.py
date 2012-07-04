@@ -41,7 +41,7 @@ class Server(object):
 
     class KeyChecker(SSHPublicKeyDatabase):
         def requestAvatarId(self, credentials):
-            return failure.Failure(UnauthorizedLogin("all access is disabled"))
+            return failure.Failure(UnauthorizedLogin("Access disabled"))
 
     class SSHRealm:
         implements(portal.IRealm)
@@ -103,7 +103,7 @@ class Server(object):
         pass
 
     def requestUsername(self, key):
-        return failure.Failure(UnauthorizedLogin("all access is disabled"))
+        return failure.Failure(UnauthorizedLogin("Access disabled"))
 
     @staticmethod
     def execCommand(self, proto, cmd):
@@ -123,6 +123,6 @@ class Server(object):
         p.registerChecker(self.KeyChecker())
         self.SSHFactory.portal = p
 
-        port = int(os.environ.get('PORT', 5022))
+        port = int(os.environ.get("PORT", 5022))
         reactor.listenTCP(5022, self.SSHFactory())
         reactor.run()
