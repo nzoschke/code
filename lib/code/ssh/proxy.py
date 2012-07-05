@@ -97,5 +97,5 @@ class Server(base.Server):
         process = reactor.spawnProcess(proto, argv[0], argv,
             env={"PATH": os.environ["PATH"]},
             path=session_dir,
-            childFDs={0:"w", 1:"r", 2:2}
+            childFDs={0:"w", 1:"r", 2:"r", 3:2}
         )
