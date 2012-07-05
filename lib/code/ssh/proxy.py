@@ -58,8 +58,9 @@ class Server(base.Server):
         if argv[0] not in ["git-upload-pack", "git-receive-pack"]:
             raise Exception("Invalid command")
 
-        # check malformed or non shell safe path            
-        m = re.match(r"^'/([a-z0-9_-]+).git'$", argv[1])
+        # check malformed or non shell safe path
+        # app name starts with letter, and contains letters, numbers or dashes
+        m = re.match(r"^'/([a-z][a-z0-9-]+).git'$", argv[1])
         if not m:
             raise Exception("Invalid path")
 

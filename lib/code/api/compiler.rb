@@ -2,6 +2,7 @@ require "cgi"
 require "code"
 require "json"
 require "redis"
+require "securerandom"
 require "sinatra"
 
 module Code
@@ -39,15 +40,17 @@ module Code
       end
 
       get "/" do
+        # authorize fingerprint and API key
         protected!
         "ok"
       end
 
-      post "/:repository" do
+      post "/:app_name" do
         protected!
-        throw(:halt, [404, "Not found\n"]) unless ACLS[@fingerprint].include?(params["repository"])
+        throw(:halt, [404, "Not found\n"]) unless params["app_name"] =~ /^[a-z][a-z0-9-]+$/
+        throw(:halt, [404, "Not found\n"]) unless ACLS[@fingerprint].include?(params["app_name"])
 
-        xid       = "%08x" % rand(2**64) # fast per-request unique id
+        xid       = SecureRandom.hex(8)
         key       = "compiler.session.#{xid}"
         reply_key = "#{key}.reply"
 
@@ -87,8 +90,8 @@ module Code
         end
       end
 
-      put "/session/:xid" do
-        key       = "compiler.session.#{params["xid"]}"
+      put %r{/session/([0-9a-f]{16})$} do |xid|
+        key       = "compiler.session.#{xid}"
         reply_key = "#{key}.reply"
 
         throw(:halt, [404, "Not found\n"]) unless redis.exists(key)
@@ -103,8 +106,8 @@ module Code
 
         key = "compiler.records"
         data = {
-          app: params["app"], 
-          log: params["log"][:tempfile].read
+          app_name: params["app_name"],
+          log:      params["log"][:tempfile].read
         }
         redis.rpush key, data
         "ok"
