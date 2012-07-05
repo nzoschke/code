@@ -1,6 +1,7 @@
 require "cgi"
 require "code"
 require "json"
+require "net/ssh"
 require "redis"
 require "securerandom"
 require "sinatra"
@@ -54,6 +55,11 @@ module Code
         key       = "compiler.session.#{xid}"
         reply_key = "#{key}.reply"
 
+        # generate a one-time-use SSH key pair
+        ssh_key     = OpenSSL::PKey::RSA.new 2048
+        data        = [ ssh_key.to_blob ].pack("m0")
+        ssh_pub_key = "#{ssh_key.ssh_type} #{data}"
+
         redis.set     key, request.ip
         redis.expire  key, COMPILER_REPLY_TIMEOUT
 
@@ -65,7 +71,7 @@ module Code
           "CACHE_GET_URL"       => "",
           "CACHE_PUT_URL"       => "",
           "CALLBACK_URL"        => "http://localhost:5000/compiler/session/#{xid}",
-          "SSH_PUB_KEY"         => params["ssh_pub_key"][:tempfile].read,
+          "SSH_PUB_KEY"         => ssh_pub_key,
           "REPO_GET_URL"        => "",
           "REPO_PUT_URL"        => "",
         }
@@ -83,7 +89,15 @@ module Code
         k, v = redis.brpop reply_key, COMPILER_REPLY_TIMEOUT
         if v
           data = JSON.parse(v)
-          "HostName=#{data["hostname"]}\nPort=#{data["port"]}\n"
+
+          # send host, port and private key 
+          # plain text format can be `csplit` into session config files
+          return <<-EOF.unindent
+            HostName="#{data["hostname"]}"
+            Port="#{data["port"]}"
+            #---
+            #{ssh_key}
+          EOF
         else
           status 503
           "No compiler available\n"
