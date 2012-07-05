@@ -12,14 +12,16 @@ function log() {
 }
 
 log fn=setup
-ssh-keygen -f id_rsa -N "" >&2            # TODO: move key management to server for security?
 HTTP_CODE=$(curl -K curl_setup.conf)
 log fn=setup code=$HTTP_CODE
 
 [[ $HTTP_CODE == 200 ]] || { echo "invalid path"; exit 1; }
 
 log fn=forward
-cat ssh_host.conf >> ssh.conf             # append hostname/port config from Compiler API
+csplit -sf c compiler.conf "/^#---/"   # Compiler API returns host, port and private key config
+cat c00 >> ssh.conf                    # append hostname/port config
+cat c01 >> id_rsa                      # save ssh private key
+chmod 600 id_rsa
 ssh -F ssh.conf -C "$@" | tee ssh.log
 log fn=forward code=${PIPESTATUS[0]}
 
