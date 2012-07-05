@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+# set -x
 
 function _exit() {
   tmp=$(pwd)
@@ -8,7 +8,8 @@ function _exit() {
 trap _exit EXIT
 
 function log() {
-  echo app=codon file=ssh-forward.sh "$@" >&2
+  # fd 3 connected to parent STDERR
+  echo app=codon file=ssh-forward.sh "$@" >&3
 }
 
 log fn=setup
