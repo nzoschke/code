@@ -3,7 +3,7 @@ set -x
 
 function _exit() {
   tmp=$(pwd)
-  [[ "$tmp" == */tmp* ]] && rm -rf $tmp   # only remove tmp-ish dirs
+  [[ "$tmp" == */tmp* ]] && rm -rf $tmp # only remove tmp-ish dirs
 }
 trap _exit EXIT
 
