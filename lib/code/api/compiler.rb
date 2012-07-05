@@ -88,15 +88,19 @@ module Code
         # wait for compiler callback
         k, v = redis.brpop reply_key, COMPILER_REPLY_TIMEOUT
         if v
-          data = JSON.parse(v)
+          data      = JSON.parse(v)
+          hostname  = data["hostname"]
+          port      = data["port"]
 
           # send host, port and private key 
           # plain text format can be `csplit` into session config files
           return <<-EOF.unindent
-            HostName="#{data["hostname"]}"
-            Port="#{data["port"]}"
-            #---
+            HostName="#{hostname}"
+            Port="#{port}"
+            ##
             #{ssh_key}
+            ##
+            [#{hostname}]:#{port} ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAGEArzJx8OYOnJmzf4tfBEvLi8DVPrJ3/c9k2I/Az64fxjHf9imyRJbixtQhlH9lfNjUIx+4LmrJH5QNRsFporcHDKOTwTTYLh5KmRpslkYHRivcJSkbh/C+BR3utDS555mV
           EOF
         else
           status 503
