@@ -97,6 +97,18 @@ module Code
         redis.rpush   reply_key, JSON.dump(data)
         redis.expire  reply_key, COMPILER_REPLY_TIMEOUT
       end
+
+      post "/session/record" do
+        protected!
+
+        key = "compiler.records"
+        data = {
+          app: params["app"], 
+          log: params["log"][:tempfile].read
+        }
+        redis.rpush key, data
+        "ok"
+      end
     end
   end
 end
