@@ -1,0 +1,81 @@
+#!/usr/bin/env python
+
+import argparse
+import os
+import subprocess
+import sys
+from urlparse import urlparse
+
+from time import time
+import base64
+import hmac, sha
+import urllib
+import base64
+
+class S3(object):
+  def __init__(self, method, src=None, dest=None, url=False, ttl=30):
+    self.method = method
+    if url:
+      self.method += "_url"
+
+    self.src    = src
+    self.dest   = dest
+    self.ttl    = ttl
+
+    self.src_uri  = urlparse(src)
+    #self.dest_uri = urlparse(dest)
+
+    self.__getattribute__(self.method)()
+
+  def get_url(self):
+    # http://forrst.com/posts/Python_method_for_creating_authenticated_s3_URLs-uUM
+    # https://github.com/boto/boto/blob/develop/boto/s3/connection.py#L310
+    # https://github.com/boto/boto/blob/develop/boto/s3/key.py#L439
+    secondsAlive = self.ttl
+    bucket = self.src_uri.hostname
+    key = self.src_uri.path[1:]
+    AWSAccessKeyId = os.environ["S3_ACCESS_KEY_ID"]
+    AWSSecretAccessKey = os.environ["S3_SECRET_ACCESS_KEY"]
+
+    expires = int(time()) + secondsAlive
+    canonicalizedResource = urllib.quote("/" + bucket + "/" + key)
+    stringToSign = "GET\n\n\n" + str(expires) + "\n" + canonicalizedResource
+    signature = base64.b64encode(hmac.new(AWSSecretAccessKey, stringToSign, sha).digest())
+    print "http://"+bucket+".s3.amazonaws.com/"+urllib.quote(key)+"?AWSAccessKeyId="+urllib.quote(AWSAccessKeyId)+"&Expires="+str(expires)+"&Signature="+urllib.quote(signature)
+
+  def __str__(self):
+    return "%s %s => %s" % (self.method.upper(), self.src, self.dest)
+
+if __name__ == "__main__":
+  parser      = argparse.ArgumentParser(
+    description="Generate signed S3 URLs, and GET/PUT S3 objects via cURL",
+    epilog="""
+      S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY must be passed via the environment.
+      S3_SRC or S3_DEST can be passed instead of --src or --dest.
+    """
+  )
+  subparsers  = parser.add_subparsers()
+  parser_get  = subparsers.add_parser("get")
+  parser_put  = subparsers.add_parser("put")
+
+  parser_get.add_argument("--src",  help="source URL to GET object", required=True)
+  parser_get.add_argument("--dest", help="destination path to write object (default .)")
+  parser_get.add_argument("--url",  help="generate signed URL instead of performing GET", action="store_true")
+  parser_get.add_argument("--ttl",  help="signed URL time to live in seconds (default 30)", type=int, default=30)
+  parser_get.set_defaults(method="get")
+
+  parser_put.add_argument("--src",  help="source path to read object")
+  parser_put.add_argument("--dest", help="destination URL to PUT object", required=True)
+  parser_put.add_argument("--url",  help="generate signed URL instead of performing PUT", action="store_true")
+  parser_put.add_argument("--ttl",  help="signed URL time to live in seconds (default 30)", type=int, default=30)
+  parser_put.set_defaults(method="put")
+
+  # read S3_DEST, S3_SRC args from env
+  argv = sys.argv[1:]
+  for f in ["dest", "src"]:
+    k = "S3_%s" % f.replace("-", "_").upper()
+    if os.environ.get(k):
+      argv += ["--%s" % f, os.environ[k]]
+
+  args = parser.parse_args(argv)
+  s3 = S3(**vars(args))
