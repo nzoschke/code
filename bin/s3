@@ -15,33 +15,36 @@ import base64
 class S3(object):
   def __init__(self, method, src=None, dest=None, url=False, ttl=30):
     self.method = method
-    if url:
-      self.method += "_url"
 
     self.src    = src
     self.dest   = dest
     self.ttl    = ttl
 
-    self.src_uri  = urlparse(src)
-    #self.dest_uri = urlparse(dest)
+    m = self.method
+    if url:
+      m += "_url"
+    self.__getattribute__(m)()
 
-    self.__getattribute__(self.method)()
-
-  def get_url(self):
+  def signed_url(self, method, url):
     # http://forrst.com/posts/Python_method_for_creating_authenticated_s3_URLs-uUM
     # https://github.com/boto/boto/blob/develop/boto/s3/connection.py#L310
     # https://github.com/boto/boto/blob/develop/boto/s3/key.py#L439
-    secondsAlive = self.ttl
-    bucket = self.src_uri.hostname
-    key = self.src_uri.path[1:]
-    AWSAccessKeyId = os.environ["S3_ACCESS_KEY_ID"]
-    AWSSecretAccessKey = os.environ["S3_SECRET_ACCESS_KEY"]
 
-    expires = int(time()) + secondsAlive
-    canonicalizedResource = urllib.quote("/" + bucket + "/" + key)
-    stringToSign = "GET\n\n\n" + str(expires) + "\n" + canonicalizedResource
+    AWSAccessKeyId      = os.environ["S3_ACCESS_KEY_ID"]
+    AWSSecretAccessKey  = os.environ["S3_SECRET_ACCESS_KEY"]
+
+    uri     = urlparse(url)
+    bucket  = uri.hostname
+    key     = uri.path[1:]
+    expires = int(time()) + self.ttl
+
+    canonical_string = "/%s/%s" % (bucket, key)
+    stringToSign = method + "\n\n\n" + str(expires) + "\n" + canonical_string
     signature = base64.b64encode(hmac.new(AWSSecretAccessKey, stringToSign, sha).digest())
-    print "http://"+bucket+".s3.amazonaws.com/"+urllib.quote(key)+"?AWSAccessKeyId="+urllib.quote(AWSAccessKeyId)+"&Expires="+str(expires)+"&Signature="+urllib.quote(signature)
+    return "http://"+bucket+".s3.amazonaws.com/"+urllib.quote(key)+"?AWSAccessKeyId="+urllib.quote(AWSAccessKeyId)+"&Expires="+str(expires)+"&Signature="+urllib.quote(signature)
+
+  def get_url(self):
+    print self.signed_url("GET", self.src)
 
   def __str__(self):
     return "%s %s => %s" % (self.method.upper(), self.src, self.dest)
