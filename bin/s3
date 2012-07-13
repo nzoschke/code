@@ -1,21 +1,18 @@
 #!/usr/bin/env python
 
 import argparse
+import base64
+import hmac, sha
 import os
 import subprocess
 import sys
-from urlparse import urlparse
-
 from time import time
-import base64
-import hmac, sha
 import urllib
-import base64
+from urlparse import urlparse
 
 class S3(object):
   def __init__(self, method, src=None, dest=None, url=False, ttl=30):
     self.method = method
-
     self.src    = src
     self.dest   = dest
     self.ttl    = ttl
@@ -26,12 +23,12 @@ class S3(object):
     self.__getattribute__(m)()
 
   def signed_url(self, method, url):
-    # http://forrst.com/posts/Python_method_for_creating_authenticated_s3_URLs-uUM
-    # https://github.com/boto/boto/blob/develop/boto/s3/connection.py#L310
-    # https://github.com/boto/boto/blob/develop/boto/s3/key.py#L439
-
-    AWSAccessKeyId      = os.environ["S3_ACCESS_KEY_ID"]
-    AWSSecretAccessKey  = os.environ["S3_SECRET_ACCESS_KEY"]
+    try:
+      AWSAccessKeyId      = os.environ["S3_ACCESS_KEY_ID"]
+      AWSSecretAccessKey  = os.environ["S3_SECRET_ACCESS_KEY"]
+    except KeyError, e:
+      print "error: S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY not set"
+      sys.exit(1)
 
     uri     = urlparse(url)
     bucket  = uri.hostname
@@ -43,11 +40,17 @@ class S3(object):
     signature = base64.b64encode(hmac.new(AWSSecretAccessKey, stringToSign, sha).digest())
     return "http://"+bucket+".s3.amazonaws.com/"+urllib.quote(key)+"?AWSAccessKeyId="+urllib.quote(AWSAccessKeyId)+"&Expires="+str(expires)+"&Signature="+urllib.quote(signature)
 
+  def get(self):
+    pass
+
+  def put(self):
+    pass
+
   def get_url(self):
     print self.signed_url("GET", self.src)
 
-  def __str__(self):
-    return "%s %s => %s" % (self.method.upper(), self.src, self.dest)
+  def put_url(self):
+    print self.signed_url("PUT", self.dest)
 
 if __name__ == "__main__":
   parser      = argparse.ArgumentParser(
