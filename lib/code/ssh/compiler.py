@@ -49,8 +49,8 @@ class Server(base.Server):
             return failure.Failure(UnauthorizedLogin("Not authorized"))
 
     def spawnProcess(self, proto, username, argv):
-        process = reactor.spawnProcess(proto, "echo", ["echo", "hello compiler!"],
-            env={"PATH": os.environ["PATH"]},
+        process = reactor.spawnProcess(proto, "env", ["/usr/bin/env"],
+            env=os.environ,
         )
 
     def onClose(self):

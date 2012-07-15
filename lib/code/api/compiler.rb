@@ -17,6 +17,7 @@ module Code
       COMPILER_API_KEY        = URI.parse(COMPILER_API_URL).password
       COMPILER_REPLY_TIMEOUT  = Config.env("COMPILER_REPLY_TIMEOUT", default: 30)
       REDIS_URL               = Config.env("REDIS_URL")
+      S3_BUCKET               = Config.env("S3_BUCKET")
 
       helpers do
         def protected!
@@ -50,10 +51,9 @@ module Code
 
       post "/:app_name" do
         protected!
-        puts params
-        puts @fingerprint
-        throw(:halt, [404, "Not found\n"]) unless params["app_name"] =~ /^[a-z][a-z0-9-]+$/
-        throw(:halt, [404, "Not found\n"]) unless ACLS[@fingerprint].include?(params["app_name"])
+        @app_name = params["app_name"]
+        throw(:halt, [404, "Not found\n"]) unless @app_name =~ /^[a-z][a-z0-9-]+$/
+        throw(:halt, [404, "Not found\n"]) unless ACLS[@fingerprint].include?(@app_name)
 
         xid       = SecureRandom.hex(8)
         key       = "compiler.session.#{xid}"
@@ -72,13 +72,21 @@ module Code
         env = {
           "BUILD_CALLBACK_URL"  => "",
           "BUILD_PUT_URL"       => "",
-          "CACHE_GET_URL"       => "",
-          "CACHE_PUT_URL"       => "",
           "CALLBACK_URL"        => "http://localhost:5000/compiler/session/#{xid}",
           "SSH_PUB_KEY"         => ssh_pub_key,
-          "REPO_GET_URL"        => "",
-          "REPO_PUT_URL"        => "",
         }
+
+        ENV["S3_SRC"] = ENV["S3_DEST"] = "#{S3_BUCKET}/caches/#{@app_name}.tgz"
+        env.merge!({
+          "CACHE_GET_URL" => %x[bin/s3 get --url].strip,
+          "CACHE_PUT_URL" => %x[bin/s3 put --url --ttl=3600].strip,
+        })
+
+        ENV["S3_SRC"] = ENV["S3_DEST"] = "#{S3_BUCKET}/repos/#{@app_name}.bundle"
+        env.merge!({
+          "REPO_GET_URL" => %x[bin/s3 get --url].strip,
+          "REPO_PUT_URL" => %x[bin/s3 put --url --ttl=3600].strip,
+        })
 
         # runtime environment
         env.merge!({
@@ -86,7 +94,7 @@ module Code
           "PORT"        => (6000 + rand(100)).to_s,
           "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
         })
-        
+
         pid = Process.spawn(env, "bin/ssh-compiler", unsetenv_others: true)
 
         # wait for compiler callback
