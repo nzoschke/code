@@ -59,6 +59,9 @@ class S3(object):
     self.dest   = dest
     self.ttl    = ttl
 
+    if os.path.isdir(self.dest) or self.dest.endswith("/"):
+      self.dest = os.path.join(self.dest, os.path.basename(self.src))
+
     m = self.method
     if url:
       m += "_url"
@@ -85,25 +88,44 @@ class S3(object):
   @log
   def get(self, log_ctx):
     conf = """
+      output  = "$output"
+      request = "GET"
+      url     = "$url"
+    """
+
+    conf = Template(conf).substitute(
+      output=self.dest,
+      url=self.signed_url("GET", self.src)
+    )
+    return self.curl(conf, log_ctx)
+
+  @log
+  def put(self, log_ctx):
+    conf = """
+      request     = "PUT"
+      upload-file = "$upload_file"
+      url         = "$url"
+    """
+    conf = Template(conf).substitute(
+      upload_file=self.src,
+      url=self.signed_url("PUT", self.dest)
+    )
+    return self.curl(conf, log_ctx)
+
+  def curl(self, conf, log_ctx):
+    conf += """
       connect-timeout = 5
       dump-header     = "$dump_header"
-      output          = "$output"
       max-time        = 60
-      request         = "GET"
       retry           = 1
       silent          = "true"
       speed-time      = 30
       speed-limit     = 3000
-      url             = "$url"
       write-out       = "code=%{http_code} size=%{size_download} speed=%{speed_download} time=%{time_total}"
     """
 
     with tempfile.NamedTemporaryFile() as header_file:
-      url = self.signed_url("GET", self.src)
-      if os.path.isdir(self.dest):
-        self.dest = os.path.join(self.dest, os.path.basename(self.src))
-
-      conf = Template(conf).substitute(dump_header=header_file.name, output=self.dest, url=url)
+      conf = Template(conf).substitute(dump_header=header_file.name)
       p = subprocess.Popen(["curl", "--config", "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
       stdout, stderr = p.communicate(input=conf)
 
@@ -114,16 +136,12 @@ class S3(object):
           headers[l[0]] = l[1].strip()
 
     log_ctx += [
-      ("object",            os.path.basename(self.src)),
       ("x-amz-id-2",        headers["x-amz-id-2"]),
       ("x-amz-request-id",  headers["x-amz-request-id"]),
       stdout
     ]
 
     return True
-
-  def put(self):
-    pass
 
   def get_url(self):
     print self.signed_url("GET", self.src)
