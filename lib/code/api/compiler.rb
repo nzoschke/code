@@ -5,6 +5,7 @@ require "net/ssh"
 require "redis"
 require "securerandom"
 require "sinatra"
+require "uri"
 
 module Code
   module API
@@ -12,7 +13,8 @@ module Code
       ACLS = {
         "25:25:85:78:31:f7:6e:46:04:9a:08:9b:8a:11:5c:a7" => ["code", "gentle-snow-22"]
       }
-      COMPILER_API_KEY        = Config.env("COMPILER_API_KEY")
+      COMPILER_API_URL        = Config.env("COMPILER_API_URL")
+      COMPILER_API_KEY        = URI.parse(COMPILER_API_URL).password
       COMPILER_REPLY_TIMEOUT  = Config.env("COMPILER_REPLY_TIMEOUT", default: 30)
       REDIS_URL               = Config.env("REDIS_URL")
 
@@ -48,6 +50,8 @@ module Code
 
       post "/:app_name" do
         protected!
+        puts params
+        puts @fingerprint
         throw(:halt, [404, "Not found\n"]) unless params["app_name"] =~ /^[a-z][a-z0-9-]+$/
         throw(:halt, [404, "Not found\n"]) unless ACLS[@fingerprint].include?(params["app_name"])
 
@@ -94,6 +98,7 @@ module Code
 
           # send host, port and private key 
           # plain text format can be `csplit` into session config files
+          # TODO: known_hosts should use a(nother?) disposable key
           return <<-EOF.unindent
             HostName="#{hostname}"
             Port="#{port}"
