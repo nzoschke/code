@@ -67,65 +67,28 @@ class S3(object):
       m += "_url"
     self.__getattribute__(m)()
 
-  def signed_url(self, method, url):
-    try:
-      AWSAccessKeyId      = os.environ["S3_ACCESS_KEY_ID"]
-      AWSSecretAccessKey  = os.environ["S3_SECRET_ACCESS_KEY"]
-    except KeyError, e:
-      print "error: S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY not set"
-      sys.exit(1)
-
-    uri     = urlparse(url)
-    bucket  = uri.hostname
-    key     = uri.path[1:]
-    expires = int(time()) + self.ttl
-
-    canonical_string = "/%s/%s" % (bucket, key)
-    stringToSign = method + "\n\n\n" + str(expires) + "\n" + canonical_string
-    signature = base64.b64encode(hmac.new(AWSSecretAccessKey, stringToSign, sha).digest())
-    return "http://"+bucket+".s3.amazonaws.com/"+urllib.quote(key)+"?AWSAccessKeyId="+urllib.quote(AWSAccessKeyId)+"&Expires="+str(expires)+"&Signature="+urllib.quote(signature)
-
-  @log
-  def get(self, log_ctx):
+  @staticmethod
+  def curl(request, path, url, log_ctx=[]):
     conf = """
-      output  = "$output"
-      request = "GET"
-      url     = "$url"
-    """
-
-    conf = Template(conf).substitute(
-      output=self.dest,
-      url=self.signed_url("GET", self.src)
-    )
-    return self.curl(conf, log_ctx)
-
-  @log
-  def put(self, log_ctx):
-    conf = """
-      request     = "PUT"
-      upload-file = "$upload_file"
-      url         = "$url"
-    """
-    conf = Template(conf).substitute(
-      upload_file=self.src,
-      url=self.signed_url("PUT", self.dest)
-    )
-    return self.curl(conf, log_ctx)
-
-  def curl(self, conf, log_ctx):
-    conf += """
       connect-timeout = 5
       dump-header     = "$dump_header"
       max-time        = 60
+      request         = "$request"
       retry           = 1
       silent          = "true"
       speed-time      = 30
       speed-limit     = 3000
       write-out       = "code: %{http_code}\\nsize_download: %{size_download}\\nspeed_download: %{speed_download}\\nsize_upload: %{size_upload}\\nspeed_upload: %{speed_upload}\\ntime: %{time_total}"
+      url             = "$url"
     """
 
+    if request == "PUT":
+      conf += 'upload-file = "$path"'
+    else:
+      conf += 'output = "$path"'
+
     with tempfile.NamedTemporaryFile() as header_file:
-      conf = Template(conf).substitute(dump_header=header_file.name)
+      conf = Template(conf).substitute(dump_header=header_file.name, path=path, request=request, url=url)
       p = subprocess.Popen(["curl", "--config", "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
       stdout, stderr = p.communicate(input=conf)
 
@@ -135,7 +98,6 @@ class S3(object):
         if len(l) == 2:
           h[l[0]] = l[1].strip()
 
-    #print headers
     log_ctx += [
       ("x-amz-id-2",        h["x-amz-id-2"]),
       ("x-amz-request-id",  h["x-amz-request-id"]),
@@ -147,11 +109,38 @@ class S3(object):
 
     return h["code"] == "200"
 
+  @staticmethod
+  def signed_url(method, url, ttl=1):
+    try:
+      AWSAccessKeyId      = os.environ["S3_ACCESS_KEY_ID"]
+      AWSSecretAccessKey  = os.environ["S3_SECRET_ACCESS_KEY"]
+    except KeyError, e:
+      print "error: S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY not set"
+      sys.exit(1)
+
+    uri     = urlparse(url)
+    bucket  = uri.hostname
+    key     = uri.path[1:]
+    expires = int(time()) + ttl
+
+    canonical_string = "/%s/%s" % (bucket, key)
+    stringToSign = method + "\n\n\n" + str(expires) + "\n" + canonical_string
+    signature = base64.b64encode(hmac.new(AWSSecretAccessKey, stringToSign, sha).digest())
+    return "http://"+bucket+".s3.amazonaws.com/"+urllib.quote(key)+"?AWSAccessKeyId="+urllib.quote(AWSAccessKeyId)+"&Expires="+str(expires)+"&Signature="+urllib.quote(signature)
+
+  @log
+  def get(self, log_ctx=[]):
+    return S3.curl("GET", self.dest, S3.signed_url("GET", self.src),  log_ctx)
+
+  @log
+  def put(self, log_ctx=[]):
+    return S3.curl("PUT", self.src,  S3.signed_url("PUT", self.dest), log_ctx)
+
   def get_url(self):
-    print self.signed_url("GET", self.src)
+    print S3.signed_url("GET", self.src,  self.ttl)
 
   def put_url(self):
-    print self.signed_url("PUT", self.dest)
+    print S3.signed_url("PUT", self.dest, self.ttl)
 
 if __name__ == "__main__":
   parser      = argparse.ArgumentParser(
