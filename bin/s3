@@ -3,6 +3,7 @@
 import argparse
 import base64
 import hmac, sha
+import inspect
 import os
 import shutil
 from string import Template
@@ -12,6 +13,44 @@ import tempfile
 from time import time
 import urllib
 from urlparse import urlparse
+
+def log(*data):
+  # log() is a decorator if first argument is a function, otherwise a printer
+  data = list(data)
+  if hasattr(data[0], "__call__"):
+    fn = data.pop(0)
+    log_ctx = []
+
+    def inner(*args, **kw):
+      # The decorator keeps a context of log data. If the function accepts a 
+      # log_ctx argument, it can mutate this context.
+      if "log_ctx" in inspect.getargspec(fn).args:
+        kw["log_ctx"] = log_ctx
+
+      try:
+        start = time()
+        log(("file", __file__), ("fn", fn.__name__), ("at", "start"))
+        result = fn(*args, **kw)
+        log(("file", __file__), ("fn", fn.__name__), ("at", "finish"), ("elapsed", time()-start), *log_ctx)
+        return result
+      except Exception, e:
+        exc = sys.exc_info()
+        log(
+          ("file", __file__), ("fn", fn.__name__), ("at", "error"), 
+          ("class", "%s.%s" % (exc[0].__module__, exc[0].__name__)), ("message", exc[1]), ("elapsed", time()-start),
+          *log_ctx
+        )
+        raise exc[0], exc[1], exc[2]
+    return inner
+
+  # print data
+  kvs = []
+  for d in data:
+    if isinstance(d, basestring):
+      kvs.append(d)
+    else:
+      kvs.append("%s=%s" % d) # presumably tuple or list
+  sys.stderr.write(" ".join(kvs) + "\n")
 
 class S3(object):
   def __init__(self, method, src=None, dest=None, url=False, ttl=30):
@@ -43,57 +82,44 @@ class S3(object):
     signature = base64.b64encode(hmac.new(AWSSecretAccessKey, stringToSign, sha).digest())
     return "http://"+bucket+".s3.amazonaws.com/"+urllib.quote(key)+"?AWSAccessKeyId="+urllib.quote(AWSAccessKeyId)+"&Expires="+str(expires)+"&Signature="+urllib.quote(signature)
 
-  def get(self):
-    basename = os.path.basename(self.src)
-    self.log(
-      ("file",  "s3"),
-      ("fn",    "get"),
-      ("at",    "start"),
-      ("key",   basename),
-    )
-
-    temp_dir    = tempfile.mkdtemp()
-
-    get_url     = self.signed_url("GET", self.src)
-    header_file = os.path.join(temp_dir, "header")
-    output_file = os.path.join(temp_dir, os.path.basename(self.src))
-
+  @log
+  def get(self, log_ctx):
     conf = """
       connect-timeout = 5
-      dump-header     = "$header_file"
-      output          = "$output_file"
+      dump-header     = "$dump_header"
+      output          = "$output"
       max-time        = 60
       request         = "GET"
       retry           = 1
       silent          = "true"
       speed-time      = 30
       speed-limit     = 3000
-      url             = "$get_url"
-      write-out       = "code=%{http_code} size=%{size_download} speed=%{speed_download} elapsed=%{time_total}"
+      url             = "$url"
+      write-out       = "code=%{http_code} size=%{size_download} speed=%{speed_download} time=%{time_total}"
     """
 
-    conf = Template(conf).substitute(get_url=get_url, header_file=header_file, output_file=output_file)
-    p = subprocess.Popen(["curl", "--config", "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = p.communicate(input=conf)
+    with tempfile.NamedTemporaryFile() as header_file:
+      url = self.signed_url("GET", self.src)
+      if os.path.isdir(self.dest):
+        self.dest = os.path.join(self.dest, os.path.basename(self.src))
 
-    headers = {}
-    with open(header_file) as f:
-      for line in f:
+      conf = Template(conf).substitute(dump_header=header_file.name, output=self.dest, url=url)
+      p = subprocess.Popen(["curl", "--config", "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      stdout, stderr = p.communicate(input=conf)
+
+      headers = {}
+      for line in header_file.readlines():
         l = line.split(":", 1)
         if len(l) == 2:
           headers[l[0]] = l[1].strip()
 
-    shutil.move(output_file, self.dest)
-
-    self.log(
-      ("file",              "s3"),
-      ("fn",                "get"),
-      ("at",                "finish"),
-      ("key",               basename),
+    log_ctx += [
+      ("object",            os.path.basename(self.src)),
       ("x-amz-id-2",        headers["x-amz-id-2"]),
       ("x-amz-request-id",  headers["x-amz-request-id"]),
       stdout
-    )
+    ]
+
     return True
 
   def put(self):
@@ -104,15 +130,6 @@ class S3(object):
 
   def put_url(self):
     print self.signed_url("PUT", self.dest)
-
-  def log(self, *args):
-    d = []
-    for a in args:
-      if isinstance(a, basestring):
-        d.append(a)
-      else:
-        d.append("%s=%s" % a) # presumably tuple or list
-    sys.stderr.write(" ".join(d) + "\n")
 
 if __name__ == "__main__":
   parser      = argparse.ArgumentParser(
