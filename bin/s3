@@ -143,16 +143,16 @@ class S3(object):
     print S3.signed_url("PUT", self.dest, self.ttl)
 
 if __name__ == "__main__":
-  parser      = argparse.ArgumentParser(
+  parser = argparse.ArgumentParser(
     description="Generate signed S3 URLs, and GET/PUT S3 objects via cURL",
     epilog="""
       S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY must be passed via the environment.
       S3_SRC or S3_DEST can be passed instead of --src or --dest.
     """
   )
-  subparsers  = parser.add_subparsers()
-  parser_get  = subparsers.add_parser("get")
-  parser_put  = subparsers.add_parser("put")
+  subparsers = parser.add_subparsers()
+  parser_get = subparsers.add_parser("get")
+  parser_put = subparsers.add_parser("put")
 
   parser_get.add_argument("--src",  help="source URL to GET object", required=True)
   parser_get.add_argument("--dest", help="destination path to write object (default .)", default=".")
@@ -169,7 +169,7 @@ if __name__ == "__main__":
   # read S3_DEST, S3_SRC args from env
   argv = sys.argv[1:]
   for f in ["dest", "src"]:
-    k = "S3_%s" % f.replace("-", "_").upper()
+    k = "S3_%s" % f.upper()
     if os.environ.get(k):
       argv += ["--%s" % f, os.environ[k]]
 
