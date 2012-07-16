@@ -70,7 +70,7 @@ class Server(base.Server):
             "path":         m.group(1),
         })
 
-        argv.insert(0, "./ssh-forward.sh")
+        argv.insert(0, "./ssh.sh")
         process = reactor.spawnProcess(proto, argv[0], argv,
             env={"PATH": os.environ["PATH"]},
             path=session_dir,
