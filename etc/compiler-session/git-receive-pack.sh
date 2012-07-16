@@ -22,8 +22,8 @@ log fn=get_repo code=$HTTP_CODE
 
 (
   git bundle verify file.bundle \
-    && git clone file.bundle $GIT_DIR \
-    || git init --bare $GIT_DIR
+    && git clone --bare file.bundle $GIT_DIR \
+    || git init  --bare $GIT_DIR
 ) 1>&3 2>&3
 
 echo " done" >&2
