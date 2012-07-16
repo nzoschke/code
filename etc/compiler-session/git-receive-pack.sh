@@ -15,6 +15,7 @@ export GIT_DIR=$(pwd)/repo.git
 
 echo -ne "Heroku preparing repository..." >&2
 
+# TODO: replace with bin/s3 call!
 log fn=get_repo
 HTTP_CODE=$(curl -K curl_get_repo.conf)
 log fn=get_repo code=$HTTP_CODE
@@ -27,7 +28,7 @@ log fn=get_repo code=$HTTP_CODE
 
 echo " done" >&2
 
-mkdir               $GIT_DIR/hooks
+mkdir -p            $GIT_DIR/hooks
 cp pre-receive.sh   $GIT_DIR/hooks/pre-receive
 cp post-receive.sh  $GIT_DIR/hooks/post-receive
 git-receive-pack    $GIT_DIR
