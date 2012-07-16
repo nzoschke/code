@@ -55,7 +55,7 @@ class Server(base.Server):
             "repo_get_url":     os.environ["REPO_GET_URL"],
             "repo_put_url":     os.environ["REPO_PUT_URL"],
         })
-        print session_dir
+
         argv.insert(0, "./git-receive-pack.sh")
         process = reactor.spawnProcess(proto, argv[0], argv,
             env=os.environ,
