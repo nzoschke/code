@@ -49,8 +49,18 @@ class Server(base.Server):
             return failure.Failure(UnauthorizedLogin("Not authorized"))
 
     def spawnProcess(self, proto, username, argv):
-        process = reactor.spawnProcess(proto, "env", ["/usr/bin/env"],
+        session_dir = self.create_session_dir("etc/compiler-session", {
+            "cache_get_url":    os.environ["CACHE_GET_URL"],
+            "cache_put_url":    os.environ["CACHE_PUT_URL"],
+            "repo_get_url":     os.environ["REPO_GET_URL"],
+            "repo_put_url":     os.environ["REPO_PUT_URL"],
+        })
+        print session_dir
+        argv.insert(0, "./git-receive-pack.sh")
+        process = reactor.spawnProcess(proto, argv[0], argv,
             env=os.environ,
+            path=session_dir,
+            childFDs={0:"w", 1:"r", 2:"r", 3:2}
         )
 
     def onClose(self):
