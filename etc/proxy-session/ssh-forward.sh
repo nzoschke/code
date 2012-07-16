@@ -8,8 +8,7 @@ function _exit() {
 trap _exit EXIT
 
 function log() {
-  # fd 3 connected to parent STDERR
-  echo app=codon file=ssh-forward.sh "$@" >&3
+  echo app=codon file=ssh.sh "$@" >&3 # FD 3 connected to parent STDERR
 }
 
 log fn=setup
