@@ -64,35 +64,12 @@ class Server(base.Server):
         if not m:
             raise Exception("Invalid path")
 
-        # make session temp dir and write curl/ssh config files
-        session_dir = tempfile.mkdtemp()
-        template_dir = "etc/session/"
-        print session_dir
-
-        settings = {
+        session_dir = self.create_session_dir("etc/proxy-session", {
             "api_url":      self.api_url,
             "auth_header":  self.authHeader(username),
             "path":         m.group(1),
-            "session_dir":  session_dir,
-        }
+        })
 
-        for l in os.listdir(template_dir):
-            conf = ""
-            src  = os.path.join(template_dir, l)
-            dest = os.path.join(session_dir,  l)
-
-            with open(src, "r") as f:
-                conf = f.read()
-                if src.endswith(".conf"):
-                    conf = Template(conf).substitute(settings)
-
-            with open(dest, "w") as f:
-                f.write(conf)
-                if src.endswith(".sh"):
-                    os.chmod(dest, 0700)
-
-        # spawn subprocess wrapper to HTTP request a compiler, then forward
-        # child stderr mapped to parent stdout for logging
         argv.insert(0, "./ssh-forward.sh")
         process = reactor.spawnProcess(proto, argv[0], argv,
             env={"PATH": os.environ["PATH"]},
