@@ -3,12 +3,12 @@
 
 function _exit() {
   tmp=$(pwd)
-  [[ "$tmp" == */tmp* ]] && rm -rf $tmp # only remove tmp-ish dirs
+  [[ "$tmp" == */tmp* ]] && rm -rf $tmp   # only remove tmp-ish dirs
 }
 trap _exit EXIT
 
 function log() {
-  echo app=codon file=ssh.sh "$@" >&3 # FD 3 connected to parent STDERR
+  echo app=codon file=ssh.sh "$@" >&3     # FD 3 connected to parent STDERR
 }
 
 log fn=setup
