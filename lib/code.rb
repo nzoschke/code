@@ -1,3 +1,7 @@
+require "erb"
+require "ostruct"
+require "tmpdir"
+
 STDOUT.sync = true
 
 module Code
@@ -12,6 +16,33 @@ module Code
 
       v
     end
+  end
+
+  def self.create_session_dir(template_dir, settings={})
+    session_dir = Dir.mktmpdir
+
+    settings["session_dir"] = session_dir
+    b = OpenStruct.new(settings).instance_eval { binding } # ugh
+
+    Dir.entries(template_dir).each do |l|
+      next if [".", ".."].include?(l)
+
+      conf = ""
+      src  = File.join(template_dir, l)
+      dest = File.join(session_dir,  l)
+
+      File.open(src, "r") do |f|
+        conf = f.read
+        conf = ERB.new(conf).result(b) if src =~ /\.conf$/
+      end
+
+      File.open(dest, "w") do |f|
+        f.write(conf)
+        f.chmod(0700) if src =~ /\.sh$/
+      end
+    end
+
+    session_dir
   end
 end
 
