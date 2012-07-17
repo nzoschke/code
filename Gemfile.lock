@@ -1,12 +1,23 @@
+GIT
+  remote: https://github.com/nzoschke/rack-streaming-proxy.git
+  revision: 4a2ee4c6e4e7db11a18bbd15c0a4ea30076202c0
+  specs:
+    rack-streaming-proxy (1.0.3)
+      rack (>= 1.0)
+      servolux (~> 0.8.1)
+
 GEM
   remote: http://rubygems.org/
   specs:
+    excon (0.14.0)
     kgio (2.7.4)
+    net-ssh (2.5.2)
     rack (1.4.1)
     rack-protection (1.2.0)
       rack
     raindrops (0.10.0)
     redis (3.0.0)
+    servolux (0.8.1)
     sinatra (1.3.2)
       rack (~> 1.3, >= 1.3.6)
       rack-protection (~> 1.2)
@@ -21,6 +32,9 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  excon
+  net-ssh
+  rack-streaming-proxy!
   redis
   sinatra
   unicorn
