@@ -146,7 +146,7 @@ class Server(object):
         # make session temp dir and write config files and scripts
         session_dir = tempfile.mkdtemp()
 
-        settings.update({"session_dir":  session_dir})
+        settings["session_dir"] = session_dir
 
         for l in os.listdir(template_dir):
             conf = ""
