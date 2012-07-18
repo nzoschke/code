@@ -7,13 +7,13 @@ $:.unshift(
 )
 
 require "unicorn"
-require "code/api/proxy"
+require "code/http/proxy"
 
 app = Rack::Builder.new {
   use Rack::CommonLogger
   use Rack::ShowExceptions
 
-  map("/") { run Code::API::Proxy }
+  map("/") { run Code::HTTP::Proxy }
 }
 
 opts = {

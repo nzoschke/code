@@ -6,7 +6,7 @@ require "sinatra"
 require "code/config"
 
 module Code
-  module API
+  module HTTP
     class Proxy < Sinatra::Application
       DIRECTOR_API_URL        = Config.env("DIRECTOR_API_URL")
       REDIS_URL               = Config.env("REDIS_URL")
