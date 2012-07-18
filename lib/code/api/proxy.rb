@@ -22,7 +22,9 @@ module Code
 
         def protected!(app_name)
           halt 404, "Not found\n" unless app_name =~ /^[a-z][a-z0-9-]+$/
+
           # TODO: auth against core
+
           @app_name = app_name
         end
 
@@ -50,8 +52,9 @@ module Code
 
           # get existing compiler session
           response  = api.get(path: "/compiler/#{app_name}")
-          route     = JSON.parse(response.body)
+          halt 502, "Error\n" unless response.status == 200
 
+          route = JSON.parse(response.body)
           return proxy(route["hostname"], route["port"], route["username"], route["password"]) if route["hostname"]
 
           halt 503, "No compiler available\n"
@@ -63,8 +66,9 @@ module Code
 
         # create (or get existing) compiler session
         response  = api.post(path: "/compiler/#{@app_name}", query: {type: "http"})
-        route     = JSON.parse(response.body)
+        halt 502, "Error\n" unless response.status == 200
 
+        route = JSON.parse(response.body)
         return proxy(route["hostname"], route["port"], route["username"], route["password"]) if route["hostname"]
 
         # wait for compiler session callback
