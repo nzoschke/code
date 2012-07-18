@@ -19,7 +19,7 @@ app = Rack::Builder.new {
 opts = {
   before_fork:      ->(s,w) { },
   listeners:        "0.0.0.0:#{ENV["PORT"] || 5000}",
-  timeout:          1800,
+  timeout:          30,
   worker_processes: 4
 }
 
