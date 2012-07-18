@@ -1,0 +1,53 @@
+#!/usr/bin/env python
+
+import argparse
+import os
+from string import Template
+import sys
+import tempfile
+
+parser = argparse.ArgumentParser()
+parser.add_argument("src_dir",    help="source directory to read")
+parser.add_argument("var",        help="name of environment variable to include in mappings", nargs="*")
+parser.add_argument("--dest-dir", help="destination directory to write (default mkdtemp() dir)")
+
+args = parser.parse_args()
+src_dir, dest_dir = args.src_dir, args.dest_dir
+
+if not os.path.exists(src_dir):
+  print "error: can not read %s" % src_dir
+  sys.exit(1)
+
+if dest_dir:
+  try:
+    os.mkdir(dest_dir)
+  except OSError, e:
+    print "error: can not create %s" % dest_dir
+    sys.exit(1)
+else:
+  dest_dir = tempfile.mkdtemp()
+
+mapping = {v:os.environ.get(v) for v in args.var}
+mapping["DEST_DIR"] = dest_dir
+
+for l in os.listdir(src_dir):
+  conf = ""
+  src  = os.path.join(src_dir,  l)
+  dest = os.path.join(dest_dir, l)
+
+  with open(src, "r") as f:
+    conf = f.read()
+    if src.endswith(".conf"):
+      try:
+        conf = Template(conf).substitute(mapping)
+      except KeyError, e:
+        print "error: no value for %s in %s" % (e, l)
+        sys.exit(1)
+
+  with open(dest, "w") as f:
+    f.write(conf)
+    if src.endswith(".sh"):
+      os.chmod(dest, 0700)
+
+print dest_dir
+sys.exit(0)

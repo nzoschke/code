@@ -1,4 +1,3 @@
-require "code"
 require "code/config"
 require "excon"
 require "git_http"
@@ -10,13 +9,10 @@ module Code
       PORT          = Config.env("PORT")
 
       def initialize
-        session_dir = Code.create_session_dir("etc/http-compiler-session", {
-          "cache_get_url" => ENV["CACHE_GET_URL"],
-          "cache_put_url" => ENV["CACHE_PUT_URL"],
-          "repo_get_url"  => ENV["REPO_GET_URL"],
-          "repo_put_url"  => ENV["REPO_PUT_URL"]
-        })
-
+        session_dir = %x[bin/template \
+          etc/http-compiler-session \
+          CACHE_GET_URL CACHE_PUT_URL REPO_GET_URL REPO_PUT_URL
+        ].strip
         pid = Process.spawn("./init.sh", chdir: session_dir, unsetenv_others: true)
         Process.wait(pid)
 
