@@ -6,57 +6,18 @@ $:.unshift(
   )
 )
 
-require "code"
-require "excon"
-require "git_http"
+require "code/http/compiler"
 require "unicorn"
 
-class Session
-  def initialize(app)
-    @app = app
-  end
+app = Rack::Builder.new {
+  use Rack::CommonLogger
+  use Rack::ShowExceptions
 
-  def call(env)
-    # after *every* request, re-PUT this hostname/port to the proxy
-    # so next request can find this backend
-    r = @app.call(env)
-    put_server_info
-    r
-  end
-
-  def put_server_info
-    begin
-      c = Excon.new(ENV["CALLBACK_URL"])
-      ip = UDPSocket.open { |s| s.connect("64.233.187.99", 1); s.addr.last }
-      c.put(:query => {:hostname => ip, :port => ENV["PORT"]})
-      return true
-    rescue => e
-      return false
-    end
-  end
-end
-
-session_dir = Code.create_session_dir("etc/http-compiler-session", {
-  "cache_get_url" => ENV["CACHE_GET_URL"],
-  "cache_put_url" => ENV["CACHE_PUT_URL"],
-  "repo_get_url"  => ENV["REPO_GET_URL"],
-  "repo_put_url"  => ENV["REPO_PUT_URL"]
-})
-
-pid = Process.spawn("./init.sh", chdir: session_dir, unsetenv_others: true)
-Process.wait(pid)
-
-app = GitHttp::App.new({
-  :project_root => session_dir,
-  :upload_pack  => true,
-  :receive_pack => true,
-})
-
-app = Rack::CommonLogger.new(app)
-app = Session.new(app)
+  map("/") { run Code::HTTP::Compiler.new }
+}
 
 opts = {
-  after_fork:      ->(s,w) { app.put_server_info }, # TODO: stop if callback doesn't work
+  after_fork:       ->(s,w) { Code::HTTP::Compiler.put_server_info }, # TODO: stop if callback doesn't work?
   listeners:        "0.0.0.0:#{ENV["PORT"] || 5000}",
   timeout:          1800,
   worker_processes: 1
