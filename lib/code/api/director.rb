@@ -1,26 +1,40 @@
+require "cgi"
 require "json"
+require "net/ssh"
 require "openssl"
+require "redis"
 require "sinatra"
 require "uri"
 
-require "code/api/helpers"
+require "code"
 require "code/config"
 
 module Code
   module API
     class Director < Sinatra::Application
+      ACLS = {
+        "25:25:85:78:31:f7:6e:46:04:9a:08:9b:8a:11:5c:a7" => ["code", "gentle-snow-22"]
+      }
+
       DIRECTOR_API_URI        = URI.parse(Config.env("DIRECTOR_API_URL"))
-      DIRECTOR_API_KEY        = DIRECTOR_API_URI.password; DIRECTOR_API_URI.password = nil
-      DIRECTOR_API_URL        = DIRECTOR_API_URI.to_s
+      DIRECTOR_API_KEY        = DIRECTOR_API_URI.password
+      DIRECTOR_API_URL        = "#{DIRECTOR_API_URI.scheme}://#{DIRECTOR_API_URI.host}:#{DIRECTOR_API_URI.port}"
       REDIS_URL               = Config.env("REDIS_URL")
       S3_BUCKET               = Config.env("S3_BUCKET")
       SESSION_KEY_SALT        = Config.env("SESSION_KEY_SALT")
       SESSION_TIMEOUT         = Config.env("SESSION_TIMEOUT", default: 30)
 
-      helpers Code::API::Helpers
-
       helpers do
-        def authorized?
+        def authorized_fingerprint?
+          @auth ||= Rack::Auth::Basic::Request.new(request.env)
+          return false unless @auth.provided? && @auth.basic? && @auth.credentials
+          return false unless @auth.credentials[1] == DIRECTOR_API_KEY
+
+          @fingerprint = CGI::unescape(@auth.credentials[0])
+          !!ACLS[@fingerprint]
+        end
+
+        def authorized_key?
           @auth ||= Rack::Auth::Basic::Request.new(request.env)
           @auth.provided? && @auth.basic? && @auth.credentials && @auth.credentials[1] == DIRECTOR_API_KEY
         end
@@ -30,7 +44,7 @@ module Code
         end
 
         def protected!(app_name)
-          unless authorized?
+          unless authorized_key?
             response["WWW-Authenticate"] = %(Basic realm="Restricted Area")
             halt 401, "Not authorized\n"
           end
@@ -42,12 +56,23 @@ module Code
           @key      = "session.#{@sid}"
         end
 
-        def auth_session!(sid)
+        def redis
+          @redis ||= Redis.new(:url => REDIS_URL)
+        end
+
+        def verify_session!(sid)
           @sid        = sid
           @key        = "session.#{@sid}"
           @reply_key  = "#{@key}.reply"
 
           halt 404, "Not found\n" unless redis.exists(@key)
+        end
+      end
+
+      get "/ssh-access" do
+        unless authorized_fingerprint?
+          response["WWW-Authenticate"] = %(Basic realm="Restricted Area")
+          halt 401, "Not authorized\n"
         end
       end
 
@@ -99,15 +124,38 @@ module Code
           "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
         })
 
-        cmd = "bin/ssh-compiler"
-        cmd = "bin/http-compiler" if params["type"] == "http"
+        cmd = "bin/http-compiler"
+        if params["type"] == "ssh"
+          cmd = "bin/ssh-compiler"
+
+          ssh_key     = OpenSSL::PKey::RSA.new 2048
+          data        = [ssh_key.to_blob].pack("m0")
+          env.merge!({"SSH_PUB_KEY" => "#{ssh_key.ssh_type} #{data}"})
+        end
+
         pid = Process.spawn(env, cmd, unsetenv_others: true)
 
-        return JSON.dump(redis.hgetall @key)
+        # wait for compiler session callback
+        k, v = redis.brpop "#{@key}.reply", SESSION_TIMEOUT
+        halt 503, "No compiler available\n" if !v
+
+        if params["type"] == "ssh"
+          route = JSON.parse(v)
+          return <<-EOF.unindent
+            HostName="#{route["hostname"]}"
+            Port="#{route["port"]}"
+            ##
+            #{ssh_key}
+            ##
+            [#{route["hostname"]}]:#{route["port"]} ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAGEArzJx8OYOnJmzf4tfBEvLi8DVPrJ3/c9k2I/Az64fxjHf9imyRJbixtQhlH9lfNjUIx+4LmrJH5QNRsFporcHDKOTwTTYLh5KmRpslkYHRivcJSkbh/C+BR3utDS555mV
+          EOF
+        else
+          return v
+        end
       end
 
       put "/session/:sid" do
-        auth_session!(params["sid"])
+        verify_session!(params["sid"])
 
         redis.hmset   @key, "hostname", params["hostname"], "port", params["port"], "username", params["username"], "password", params["password"]
         redis.expire  @key, SESSION_TIMEOUT
@@ -118,7 +166,7 @@ module Code
       end
 
       delete "/session/:sid" do
-        auth_session!(params["sid"])
+        verify_session!(params["sid"])
 
         redis.del @key, @reply_key
 

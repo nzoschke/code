@@ -18,7 +18,7 @@ class Server(base.Server):
     def __init__(self):
         super(Server, self).__init__()
 
-        url = urlparse(os.environ.get("COMPILER_API_URL"))
+        url = urlparse(os.environ.get("DIRECTOR_API_URL"))
         self.api_key = url.password
         self.api_url = "%s://%s:%s%s" % (url.scheme, url.hostname, url.port, url.path)
 
@@ -39,7 +39,7 @@ class Server(base.Server):
         username = key.fingerprint()
 
         agent = Agent(reactor)
-        d = agent.request("GET", self.api_url,
+        d = agent.request("GET", "%s/ssh-access" % self.api_url,
             Headers({
                 "Authorization":    [self.authHeader(username)],
                 "User-Agent":       ["SSH Proxy"]

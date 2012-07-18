@@ -3,7 +3,6 @@ require "json"
 require "rack/streaming_proxy"
 require "sinatra"
 
-require "code/api/helpers"
 require "code/config"
 
 module Code
@@ -12,8 +11,6 @@ module Code
       DIRECTOR_API_URL        = Config.env("DIRECTOR_API_URL")
       REDIS_URL               = Config.env("REDIS_URL")
       SESSION_TIMEOUT         = Config.env("SESSION_TIMEOUT", default: 30)
-
-      helpers Code::API::Helpers
 
       helpers do
         def api
@@ -70,13 +67,6 @@ module Code
 
         route = JSON.parse(response.body)
         return proxy(route["hostname"], route["port"], route["username"], route["password"]) if route["hostname"]
-
-        # wait for compiler session callback
-        k, v = redis.brpop "#{route["key"]}.reply", SESSION_TIMEOUT
-        if v
-          route = JSON.parse(v)
-          return proxy(route["hostname"], route["port"], route["username"])
-        end
 
         halt 503, "No compiler available\n"
       end
