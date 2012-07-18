@@ -6,8 +6,8 @@ $:.unshift(
   )
 )
 
-require "unicorn"
 require "code/http/proxy"
+require "unicorn"
 
 app = Rack::Builder.new {
   use Rack::CommonLogger

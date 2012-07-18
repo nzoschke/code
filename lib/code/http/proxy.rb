@@ -1,9 +1,8 @@
+require "code/config"
 require "excon"
 require "json"
 require "rack/streaming_proxy"
 require "sinatra"
-
-require "code/config"
 
 module Code
   module HTTP
