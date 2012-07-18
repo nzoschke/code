@@ -5,19 +5,6 @@ require "tmpdir"
 STDOUT.sync = true
 
 module Code
-  module Config
-    def self.env(k, opts={})
-      opts = { required: true }.merge(opts)
-
-      unless v = ENV[k]
-        v = opts[:default]
-        abort("error: require #{k}") if opts[:required] && !v
-      end
-
-      v
-    end
-  end
-
   def self.create_session_dir(template_dir, settings={})
     session_dir = Dir.mktmpdir
 
