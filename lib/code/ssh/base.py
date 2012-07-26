@@ -141,26 +141,3 @@ class Server(object):
 
         reactor.listenTCP(int(port), self.SSHFactory())
         reactor.run()
-
-    def create_session_dir(self, template_dir, settings={}):
-        # make session temp dir and write config files and scripts
-        session_dir = tempfile.mkdtemp()
-
-        settings["session_dir"] = session_dir
-
-        for l in os.listdir(template_dir):
-            conf = ""
-            src  = os.path.join(template_dir, l)
-            dest = os.path.join(session_dir,  l)
-
-            with open(src, "r") as f:
-                conf = f.read()
-                if src.endswith(".conf"):
-                    conf = Template(conf).substitute(settings)
-
-            with open(dest, "w") as f:
-                f.write(conf)
-                if src.endswith(".sh"):
-                    os.chmod(dest, 0700)
-
-        return session_dir

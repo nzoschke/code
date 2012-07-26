@@ -9,10 +9,11 @@ module Code
       PORT          = Config.env("PORT")
 
       def initialize
-        session_dir = %x[bin/template \
-          etc/http-compiler-session \
-          CACHE_GET_URL CACHE_PUT_URL REPO_GET_URL REPO_PUT_URL
-        ].strip
+        session_dir = IO.popen([
+          "./bin/template", "etc/compiler-session",
+          "CACHE_GET_URL", "CACHE_PUT_URL", "CALLBACK_URL", "REPO_GET_URL", "REPO_PUT_URL"
+        ]) { |io| io.read }.strip
+
         pid = Process.spawn("./init.sh", chdir: session_dir, unsetenv_others: true)
         Process.wait(pid)
 

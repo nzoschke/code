@@ -2,6 +2,7 @@ import base64
 import os
 import re
 from string import Template
+import subprocess
 import sys
 import tempfile
 import urllib
@@ -64,11 +65,13 @@ class Server(base.Server):
         if not m:
             raise Exception("Invalid path")
 
-        session_dir = self.create_session_dir("etc/proxy-session", {
-            "api_url":      self.api_url,
-            "auth_header":  self.authHeader(username),
-            "path":         m.group(1),
-        })
+        os.environ["API_URL"]       = self.api_url
+        os.environ["AUTH_HEADER"]   = self.authHeader(username)
+        os.environ["APP"]           = m.group(1)
+        session_dir = subprocess.check_output([
+            "bin/template", "etc/ssh-proxy-session",
+            "API_URL", "AUTH_HEADER", "APP"
+        ]).strip()
 
         argv.insert(0, "./ssh.sh")
         process = reactor.spawnProcess(proto, argv[0], argv,

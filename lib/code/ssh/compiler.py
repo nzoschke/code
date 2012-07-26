@@ -1,5 +1,6 @@
 import os
 import socket
+import subprocess
 import sys
 import urllib
 from twisted.conch.ssh import keys
@@ -49,12 +50,10 @@ class Server(base.Server):
             return failure.Failure(UnauthorizedLogin("Not authorized"))
 
     def spawnProcess(self, proto, username, argv):
-        session_dir = self.create_session_dir("etc/compiler-session", {
-            "cache_get_url":    os.environ["CACHE_GET_URL"],
-            "cache_put_url":    os.environ["CACHE_PUT_URL"],
-            "repo_get_url":     os.environ["REPO_GET_URL"],
-            "repo_put_url":     os.environ["REPO_PUT_URL"],
-        })
+        session_dir = subprocess.check_output([
+            "bin/template", "etc/compiler-session",
+            "CACHE_GET_URL", "CACHE_PUT_URL", "CALLBACK_URL", "REPO_GET_URL", "REPO_PUT_URL"
+        ]).strip()
 
         argv.insert(0, "./git-receive-pack.sh")
         process = reactor.spawnProcess(proto, argv[0], argv,
