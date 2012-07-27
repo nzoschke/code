@@ -136,16 +136,16 @@ module Code
             "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
           })
 
-          cmd = "bin/http-compiler"
+          cmd = ["bundle", "exec", "bin/http-compiler"]
           if params["type"] == "ssh"
-            cmd = "bin/ssh-compiler"
+            cmd = ["bin/ssh-compiler"]
 
             ssh_key     = OpenSSL::PKey::RSA.new 2048
             data        = [ssh_key.to_blob].pack("m0")
             env.merge!({"SSH_PUB_KEY" => "#{ssh_key.ssh_type} #{data}"})
           end
 
-          pid = Process.spawn(env, cmd, unsetenv_others: true)
+          pid = Process.spawn(env, *cmd, unsetenv_others: true)
 
           # wait for compiler session callback
           k, v = redis.brpop "#{@key}.reply", SESSION_TIMEOUT
