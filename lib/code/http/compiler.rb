@@ -30,11 +30,7 @@ module Code
 
       def self.put_server_info
         @ip ||= UDPSocket.open { |s| s.connect("64.233.187.99", 1); s.addr.last }
-        begin
-          Excon.new(CALLBACK_URL).put(:query => {:hostname => @ip, :port => PORT})
-        rescue Excon::Errors::SocketError => e
-          puts e.inspect
-        end
+        Excon.new(CALLBACK_URL).put(:query => {:hostname => @ip, :port => PORT})
       end
     end
   end
