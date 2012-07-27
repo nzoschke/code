@@ -1,4 +1,5 @@
 require "cgi"
+require 'heroku-api'
 require "json"
 require "net/ssh"
 require "openssl"
@@ -19,6 +20,7 @@ module Code
       DIRECTOR_API_URI        = URI.parse(Config.env("DIRECTOR_API_URL"))
       DIRECTOR_API_KEY        = DIRECTOR_API_URI.password
       DIRECTOR_API_URL        = "#{DIRECTOR_API_URI.scheme}://#{DIRECTOR_API_URI.host}:#{DIRECTOR_API_URI.port}"
+      HEROKU_API_KEY          = Config.env("HEROKU_API_KEY")
       REDIS_URL               = Config.env("REDIS_URL")
       S3_BUCKET               = Config.env("S3_BUCKET")
       SESSION_KEY_SALT        = Config.env("SESSION_KEY_SALT")
@@ -43,6 +45,10 @@ module Code
           OpenSSL::PKCS5::pbkdf2_hmac_sha1(key, SESSION_KEY_SALT, 1000, 24).unpack("H*")[0]
         end
 
+        def heroku
+          $heroku ||= Heroku::API.new(:api_key => HEROKU_API_KEY)
+        end
+
         def protected!
           unless authorized_key?
             response["WWW-Authenticate"] = %(Basic realm="Restricted Area")
@@ -50,7 +56,8 @@ module Code
           end
 
           @app_name = params[:app_name]
-          @sid      = hash("#{@app_name}_#{params["type"]}")
+          @type     = params["type"]
+          @sid      = hash("#{@app_name}_#{@type}")
           @key      = "session.#{@sid}"
 
           halt 404, "Not found\n" unless @app_name =~ /^[a-z][a-z0-9-]+$/
@@ -67,7 +74,7 @@ module Code
           redis.expire @key, SESSION_TIMEOUT
           print route.inspect
 
-          if params["type"] == "ssh"
+          if @type == "ssh"
             return <<-EOF.unindent
               HostName="#{route["hostname"]}"
               Port="#{route["port"]}"
@@ -122,36 +129,35 @@ module Code
             "CACHE_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"]).read.strip,
           })
 
-          ENV["S3_SRC"] = "#{S3_BUCKET}/repos/#{@app_name}.bundle"
+          ENV["S3_URL"] = "#{S3_BUCKET}/repos/#{@app_name}.bundle"
           env.merge!({
             "REPO_GET_URL" => IO.popen(["bin/s3", "get"]).read.strip,
             "REPO_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"]).read.strip,
           })
 
-          # TODO: replace with `heroku run` call for secure LXC container
-          # local runtime environment
-          env.merge!({
-            "PATH"        => ENV["PATH"],
-            "PORT"        => (6000 + rand(100)).to_s,
-            "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
-          })
-
-          cmd = ["bundle", "exec", "bin/http-compiler"]
-          if params["type"] == "ssh"
-            cmd = ["bin/ssh-compiler"]
-
+          if @type == "ssh"
             ssh_key     = OpenSSL::PKey::RSA.new 2048
             data        = [ssh_key.to_blob].pack("m0")
             env.merge!({"SSH_PUB_KEY" => "#{ssh_key.ssh_type} #{data}"})
           end
 
-          pid = Process.spawn(env, *cmd, unsetenv_others: true)
+          if ENV["COMPILE_HEROKU"]
+            heroku.post_ps("code-compiler", "#{@type}_compiler", :ps_env => env) # TODO: config var for app name
+          else
+            env.merge!({
+              "PATH"        => ENV["PATH"],
+              "PORT"        => (6000 + rand(100)).to_s,
+              "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
+            })
+            cmd = "bin/#{@type}-compiler"
+            pid = Process.spawn(env, cmd, unsetenv_others: true)
+          end
 
           # wait for compiler session callback
           k, v = redis.brpop "#{@key}.reply", SESSION_TIMEOUT
           halt 503, "No compiler available\n" if !v
 
-          redis.hmset @key, "ssh_key", ssh_key if params["type"] == "ssh"
+          redis.hmset @key, "ssh_key", ssh_key if @type == "ssh"
         end
 
         session
