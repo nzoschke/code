@@ -312,24 +312,31 @@ def has_child(pid, comm_p)
   return false
 end
 
-uri  = URI.parse ENV["CALLBACK_URL"]
-http = Net::HTTP.new(uri.host, uri.port)
-http.use_ssl = true if uri.scheme == "https"
-put  = Net::HTTP::Put.new(uri.path)
-head = Net::HTTP::Head.new(uri.path)
 
-ppid = Process.ppid
+begin
+  uri  = URI.parse ENV["CALLBACK_URL"]
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = true if uri.scheme == "https"
+  put  = Net::HTTP::Put.new(uri.path)
+  head = Net::HTTP::Head.new(uri.path)
 
-loop do
-  git = has_child(ppid, /^git/)
-  puts "app=codon file=heartbeat fn=main ppid=#{ppid} git=#{git}"
-  http.request(put) if git # keep session alive
+  ppid = Process.ppid
 
-  # test if session has expired and self-destruct
-  if http.request(head).code == "404"
-    Process.kill("TERM", ppid)
-    exit(1)
+  loop do
+    git = has_child(ppid, /^git/)
+    puts "app=codon file=heartbeat fn=main ppid=#{ppid} git=#{git}"
+    http.request(put) if git # keep session alive
+
+    # test if session has expired and self-destruct
+    if http.request(head).code == "404"
+      raise Exception.new("not found")
+    end
+
+    sleep 10
   end
-
-  sleep 10
+rescue => e
+  puts e.inspect
+  Process.kill("TERM", Process.ppid)
+  exit(1)
 end
+
