@@ -165,6 +165,11 @@ module Code
         "ok"
       end
 
+      head "/session/:sid" do
+        verify_session!(params["sid"])
+        "ok"
+      end
+
       delete "/session/:sid" do
         verify_session!(params["sid"])
 

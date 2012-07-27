@@ -1,5 +1,8 @@
 #!/usr/bin/env ruby
 
+require "net/https"
+require "uri"
+
 begin
   require "sys/proctable"
 rescue LoadError => e
@@ -309,8 +312,24 @@ def has_child(pid, comm_p)
   return false
 end
 
+uri  = URI.parse ENV["CALLBACK_URL"]
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = true if uri.scheme == "https"
+put  = Net::HTTP::Put.new(uri.path)
+head = Net::HTTP::Head.new(uri.path)
+
+ppid = Process.ppid
+
 loop do
-  @ppid ||= Process.ppid
-  puts "app=codon file=heartbeat fn=main ppid=#{@ppid} git=#{has_child(@ppid, /^git/)}"
-  sleep 30
+  git = has_child(ppid, /^git/)
+  puts "app=codon file=heartbeat fn=main ppid=#{ppid} git=#{git}"
+  http.request(put) if git # keep session alive
+
+  # test if session has expired and self-destruct
+  if http.request(head).code == "404"
+    Process.kill("TERM", ppid)
+    exit(1)
+  end
+
+  sleep 1
 end
