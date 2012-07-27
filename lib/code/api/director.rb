@@ -90,67 +90,67 @@ module Code
       post "/compiler/:app_name" do
         protected!(params["app_name"])
 
-        if redis.exists(@key)
-          redis.expire @key, SESSION_TIMEOUT
-          return JSON.dump(redis.hgetall @key)
+        if !redis.exists(@key)
+          redis.hset    @key, "key", @key
+          redis.expire  @key, SESSION_TIMEOUT
+
+          env = {
+            "BUILD_CALLBACK_URL"  => "",
+            "BUILD_PUT_URL"       => "",
+            "CALLBACK_URL"        => "#{DIRECTOR_API_URL}/session/#{@sid}",
+          }
+
+          ENV["S3_SRC"] = ENV["S3_DEST"] = "#{S3_BUCKET}/caches/#{@app_name}.tgz"
+          env.merge!({
+            "CACHE_GET_URL" => %x[bin/s3 get --url].strip,
+            "CACHE_PUT_URL" => %x[bin/s3 put --url --ttl=3600].strip,
+          })
+
+          ENV["S3_SRC"] = ENV["S3_DEST"] = "#{S3_BUCKET}/repos/#{@app_name}.bundle"
+          env.merge!({
+            "REPO_GET_URL" => %x[bin/s3 get --url].strip,
+            "REPO_PUT_URL" => %x[bin/s3 put --url --ttl=3600].strip,
+          })
+
+          # TODO: replace with `heroku run` call for secure LXC container
+          # local runtime environment
+          env.merge!({
+            "PATH"        => ENV["PATH"],
+            "PORT"        => (6000 + rand(100)).to_s,
+            "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
+          })
+
+          cmd = "bin/http-compiler"
+          if params["type"] == "ssh"
+            cmd = "bin/ssh-compiler"
+
+            ssh_key     = OpenSSL::PKey::RSA.new 2048
+            data        = [ssh_key.to_blob].pack("m0")
+            env.merge!({"SSH_PUB_KEY" => "#{ssh_key.ssh_type} #{data}"})
+          end
+
+          pid = Process.spawn(env, cmd, unsetenv_others: true)
+
+          # wait for compiler session callback
+          k, v = redis.brpop "#{@key}.reply", SESSION_TIMEOUT
+          halt 503, "No compiler available\n" if !v
+
+          redis.hmset @key, "ssh_key", ssh_key if params["type"] == "ssh"
         end
 
-        redis.hset    @key, "key", @key
-        redis.expire  @key, SESSION_TIMEOUT
-
-        env = {
-          "BUILD_CALLBACK_URL"  => "",
-          "BUILD_PUT_URL"       => "",
-          "CALLBACK_URL"        => "#{DIRECTOR_API_URL}/session/#{@sid}",
-        }
-
-        ENV["S3_SRC"] = ENV["S3_DEST"] = "#{S3_BUCKET}/caches/#{@app_name}.tgz"
-        env.merge!({
-          "CACHE_GET_URL" => %x[bin/s3 get --url].strip,
-          "CACHE_PUT_URL" => %x[bin/s3 put --url --ttl=3600].strip,
-        })
-
-        ENV["S3_SRC"] = ENV["S3_DEST"] = "#{S3_BUCKET}/repos/#{@app_name}.bundle"
-        env.merge!({
-          "REPO_GET_URL" => %x[bin/s3 get --url].strip,
-          "REPO_PUT_URL" => %x[bin/s3 put --url --ttl=3600].strip,
-        })
-
-        # TODO: replace with `heroku run` call for secure LXC container
-        # local runtime environment
-        env.merge!({
-          "PATH"        => ENV["PATH"],
-          "PORT"        => (6000 + rand(100)).to_s,
-          "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
-        })
-
-        cmd = "bin/http-compiler"
-        if params["type"] == "ssh"
-          cmd = "bin/ssh-compiler"
-
-          ssh_key     = OpenSSL::PKey::RSA.new 2048
-          data        = [ssh_key.to_blob].pack("m0")
-          env.merge!({"SSH_PUB_KEY" => "#{ssh_key.ssh_type} #{data}"})
-        end
-
-        pid = Process.spawn(env, cmd, unsetenv_others: true)
-
-        # wait for compiler session callback
-        k, v = redis.brpop "#{@key}.reply", SESSION_TIMEOUT
-        halt 503, "No compiler available\n" if !v
+        route = redis.hgetall @key
 
         if params["type"] == "ssh"
-          route = JSON.parse(v)
           return <<-EOF.unindent
             HostName="#{route["hostname"]}"
             Port="#{route["port"]}"
             ##
-            #{ssh_key}
+            #{route["ssh_key"]}
             ##
             [#{route["hostname"]}]:#{route["port"]} ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAGEArzJx8OYOnJmzf4tfBEvLi8DVPrJ3/c9k2I/Az64fxjHf9imyRJbixtQhlH9lfNjUIx+4LmrJH5QNRsFporcHDKOTwTTYLh5KmRpslkYHRivcJSkbh/C+BR3utDS555mV
           EOF
         else
-          return v
+          return JSON.dump(route)
         end
       end
 
@@ -159,7 +159,7 @@ module Code
 
         redis.hmset   @key, "hostname", params["hostname"], "port", params["port"], "username", params["username"], "password", params["password"]
         redis.expire  @key, SESSION_TIMEOUT
-        redis.rpush   @reply_key, JSON.dump(redis.hgetall @key)
+        redis.rpush   @reply_key, "ok"
         redis.expire  @reply_key, SESSION_TIMEOUT
 
         "ok"
