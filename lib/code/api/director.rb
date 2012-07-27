@@ -116,16 +116,16 @@ module Code
             "CALLBACK_URL"        => "#{DIRECTOR_API_URL}/session/#{@sid}",
           }
 
-          ENV["S3_SRC"] = ENV["S3_DEST"] = "#{S3_BUCKET}/caches/#{@app_name}.tgz"
+          ENV["S3_URL"] = "#{S3_BUCKET}/caches/#{@app_name}.tgz"
           env.merge!({
-            "CACHE_GET_URL" => %x[bin/s3 get --url].strip,
-            "CACHE_PUT_URL" => %x[bin/s3 put --url --ttl=3600].strip,
+            "CACHE_GET_URL" => IO.popen(["bin/s3", "get"]).read.strip,
+            "CACHE_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"]).read.strip,
           })
 
-          ENV["S3_SRC"] = ENV["S3_DEST"] = "#{S3_BUCKET}/repos/#{@app_name}.bundle"
+          ENV["S3_SRC"] = "#{S3_BUCKET}/repos/#{@app_name}.bundle"
           env.merge!({
-            "REPO_GET_URL" => %x[bin/s3 get --url].strip,
-            "REPO_PUT_URL" => %x[bin/s3 put --url --ttl=3600].strip,
+            "REPO_GET_URL" => IO.popen(["bin/s3", "get"]).read.strip,
+            "REPO_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"]).read.strip,
           })
 
           # TODO: replace with `heroku run` call for secure LXC container
