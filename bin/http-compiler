@@ -17,10 +17,14 @@ app = Rack::Builder.new {
 }
 
 opts = {
-  after_fork:       ->(s,w) { Code::HTTP::Compiler.put_server_info }, # TODO: stop if callback doesn't work?
   listeners:        "0.0.0.0:#{ENV["PORT"] || 5000}",
   timeout:          1800,
   worker_processes: 1
 }
+
+unless ENV["CALLBACK_URL"].empty?
+  opts[:after_fork] = lambda { |s,w| Code::HTTP::Compiler.put_server_info } # TODO: stop if callback doesn't work?
+  Process.spawn("bin/heartbeat")
+end
 
 Unicorn::HttpServer.new(app, opts).start.join

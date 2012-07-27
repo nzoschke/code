@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import subprocess
 import sys
 
 sys.path.insert(0,
@@ -9,4 +10,8 @@ sys.path.insert(0,
 )
 
 from code.ssh import compiler
+
+if os.environ["CALLBACK_URL"] != "":
+  subprocess.Popen(["bin/heartbeat"])
+
 compiler.Server().run(port=os.environ.get("PORT"))
