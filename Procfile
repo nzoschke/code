@@ -1,4 +1,4 @@
-web:            bundle exec bin/director
+web:            bin/web
 http_compiler:  bundle exec bin/http-compiler
 http_proxy:     bundle exec bin/http-proxy
 ssh_compiler:   bin/ssh-compiler
