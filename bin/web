@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 [ "$PROXY" ]    && exec bundle exec bin/http-proxy
 [ "$COMPILER" ] && exec bundle exec bin/http-compiler
