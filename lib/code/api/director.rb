@@ -50,14 +50,36 @@ module Code
           end
 
           @app_name = params[:app_name]
-          @sid      = hash(@app_name)
+          @sid      = hash("#{@app_name}_#{params["type"]}")
           @key      = "session.#{@sid}"
 
           halt 404, "Not found\n" unless @app_name =~ /^[a-z][a-z0-9-]+$/
         end
 
         def redis
-          @redis ||= Redis.new(:url => REDIS_URL)
+          $redis ||= Redis.new(:url => REDIS_URL)
+        end
+
+        def session
+          halt 404, "Not found\n" unless redis.exists(@key)
+
+          route = redis.hgetall @key
+          redis.expire @key, SESSION_TIMEOUT
+          print route.inspect
+
+          if params["type"] == "ssh"
+            return <<-EOF.unindent
+              HostName="#{route["hostname"]}"
+              Port="#{route["port"]}"
+              ##
+              #{route["ssh_key"]}
+              ##
+              [#{route["hostname"]}]:#{route["port"]} ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAGEArzJx8OYOnJmzf4tfBEvLi8DVPrJ3/c9k2I/Az64fxjHf9imyRJbixtQhlH9lfNjUIx+4LmrJH5QNRsFporcHDKOTwTTYLh5KmRpslkYHRivcJSkbh/C+BR3utDS555mV
+            EOF
+          else
+            return JSON.dump(route)
+          end
+
         end
 
         def verify_session!(sid)
@@ -78,13 +100,7 @@ module Code
 
       get "/compiler/:app_name" do
         protected!
-
-        if redis.exists(@key)
-          redis.expire @key, SESSION_TIMEOUT
-          return JSON.dump(redis.hgetall @key)
-        end
-
-        halt 404, "Not found\n"
+        session
       end
 
       post "/compiler/:app_name" do
@@ -138,20 +154,7 @@ module Code
           redis.hmset @key, "ssh_key", ssh_key if params["type"] == "ssh"
         end
 
-        route = redis.hgetall @key
-
-        if params["type"] == "ssh"
-          return <<-EOF.unindent
-            HostName="#{route["hostname"]}"
-            Port="#{route["port"]}"
-            ##
-            #{route["ssh_key"]}
-            ##
-            [#{route["hostname"]}]:#{route["port"]} ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAGEArzJx8OYOnJmzf4tfBEvLi8DVPrJ3/c9k2I/Az64fxjHf9imyRJbixtQhlH9lfNjUIx+4LmrJH5QNRsFporcHDKOTwTTYLh5KmRpslkYHRivcJSkbh/C+BR3utDS555mV
-          EOF
-        else
-          return JSON.dump(route)
-        end
+        session
       end
 
       put "/session/:sid" do
