@@ -25,9 +25,7 @@ module Code
       end
 
       def call(env)
-        r = @app.call(env)
-        Compiler.put_server_info
-        r
+        @app.call(env)
       end
 
       def self.put_server_info
