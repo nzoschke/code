@@ -47,7 +47,7 @@ module Code
           protected!(app_name)
 
           # get existing compiler session
-          response  = api.get(path: "/compiler/#{app_name}")
+          response  = api.get(path: "/compiler/#{app_name}", query: {type: "http"})
           halt 502, "Error\n" unless response.status == 200
 
           route = JSON.parse(response.body)
