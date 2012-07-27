@@ -26,6 +26,9 @@ class Server(base.Server):
             raise Exception("Invalid session")
 
     def onStart(self):
+        if self.callback_url == "":
+            return
+
         qs = urllib.urlencode({
             "hostname": self.hostname,
             "port":     self.port,
@@ -61,6 +64,3 @@ class Server(base.Server):
             path=session_dir,
             childFDs={0:"w", 1:"r", 2:"r", 3:2}
         )
-
-    def onClose(self):
-        reactor.stop()
