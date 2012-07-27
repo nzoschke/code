@@ -1,6 +1,7 @@
 source :rubygems
 
 gem "excon"
+gem "heroku-api"
 gem "net-ssh"
 gem "rack-streaming-proxy", :git => "https://github.com/nzoschke/rack-streaming-proxy.git"
 gem "redis"

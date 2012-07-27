@@ -10,6 +10,8 @@ GEM
   remote: http://rubygems.org/
   specs:
     excon (0.14.0)
+    heroku-api (0.2.6)
+      excon (~> 0.14.0)
     kgio (2.7.4)
     net-ssh (2.5.2)
     rack (1.4.1)
@@ -34,6 +36,7 @@ PLATFORMS
 
 DEPENDENCIES
   excon
+  heroku-api
   net-ssh
   rack-streaming-proxy!
   redis
