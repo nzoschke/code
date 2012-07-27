@@ -8,7 +8,6 @@ module Code
   module HTTP
     class Proxy < Sinatra::Application
       DIRECTOR_API_URL        = Config.env("DIRECTOR_API_URL")
-      REDIS_URL               = Config.env("REDIS_URL")
       SESSION_TIMEOUT         = Config.env("SESSION_TIMEOUT", default: 30)
 
       helpers do
