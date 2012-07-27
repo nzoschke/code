@@ -12,7 +12,7 @@ module Code
         $session_dir ||= IO.popen([
           "./bin/template", "etc/compiler-session",
           "CACHE_GET_URL", "CACHE_PUT_URL", "CALLBACK_URL", "REPO_GET_URL", "REPO_PUT_URL"
-        ]) { |io| io.read }.strip
+        ]).read.strip
 
         pid = Process.spawn("./init.sh", chdir: $session_dir, unsetenv_others: true, 3 => 2)
         Process.wait(pid)
