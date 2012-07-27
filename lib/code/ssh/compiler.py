@@ -19,6 +19,7 @@ class Server(base.Server):
         self.callback_url = os.environ["CALLBACK_URL"]
         self.hostname     = socket.gethostbyname(socket.gethostname())
         self.port         = os.environ["PORT"]
+        self.session_dir  = None
         self.ssh_pub_key  = os.environ["SSH_PUB_KEY"]
 
     def _cbOnStart(self, response):
@@ -53,14 +54,15 @@ class Server(base.Server):
             return failure.Failure(UnauthorizedLogin("Not authorized"))
 
     def spawnProcess(self, proto, username, argv):
-        session_dir = subprocess.check_output([
-            "bin/template", "etc/compiler-session",
-            "CACHE_GET_URL", "CACHE_PUT_URL", "CALLBACK_URL", "REPO_GET_URL", "REPO_PUT_URL"
-        ]).strip()
+        if not self.session_dir:
+            self.session_dir = subprocess.check_output([
+                "bin/template", "etc/compiler-session",
+                "CACHE_GET_URL", "CACHE_PUT_URL", "CALLBACK_URL", "REPO_GET_URL", "REPO_PUT_URL"
+            ]).strip()
 
         argv.insert(0, "./git-receive-pack.sh")
         process = reactor.spawnProcess(proto, argv[0], argv,
             env=os.environ,
-            path=session_dir,
+            path=self.session_dir,
             childFDs={0:"w", 1:"r", 2:"r", 3:2}
         )

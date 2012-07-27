@@ -9,16 +9,16 @@ module Code
       PORT          = Config.env("PORT")
 
       def initialize
-        session_dir = IO.popen([
+        $session_dir ||= IO.popen([
           "./bin/template", "etc/compiler-session",
           "CACHE_GET_URL", "CACHE_PUT_URL", "CALLBACK_URL", "REPO_GET_URL", "REPO_PUT_URL"
         ]) { |io| io.read }.strip
 
-        pid = Process.spawn("./init.sh", chdir: session_dir, unsetenv_others: true)
+        pid = Process.spawn("./init.sh", chdir: $session_dir, unsetenv_others: true, 3 => 2)
         Process.wait(pid)
 
         @app = GitHttp::App.new({
-          :project_root => session_dir,
+          :project_root => $session_dir,
           :upload_pack  => true,
           :receive_pack => true,
         })
