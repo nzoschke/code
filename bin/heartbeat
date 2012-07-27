@@ -331,5 +331,5 @@ loop do
     exit(1)
   end
 
-  sleep 1
+  sleep 10
 end
