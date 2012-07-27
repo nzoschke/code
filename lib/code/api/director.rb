@@ -43,17 +43,17 @@ module Code
           OpenSSL::PKCS5::pbkdf2_hmac_sha1(key, SESSION_KEY_SALT, 1000, 24).unpack("H*")[0]
         end
 
-        def protected!(app_name)
+        def protected!
           unless authorized_key?
             response["WWW-Authenticate"] = %(Basic realm="Restricted Area")
             halt 401, "Not authorized\n"
           end
 
-          halt 404, "Not found\n" unless app_name =~ /^[a-z][a-z0-9-]+$/
-
           @app_name = params[:app_name]
           @sid      = hash(@app_name)
           @key      = "session.#{@sid}"
+
+          halt 404, "Not found\n" unless @app_name =~ /^[a-z][a-z0-9-]+$/
         end
 
         def redis
@@ -77,7 +77,7 @@ module Code
       end
 
       get "/compiler/:app_name" do
-        protected!(params["app_name"])
+        protected!
 
         if redis.exists(@key)
           redis.expire @key, SESSION_TIMEOUT
@@ -88,7 +88,7 @@ module Code
       end
 
       post "/compiler/:app_name" do
-        protected!(params["app_name"])
+        protected!
 
         if !redis.exists(@key)
           redis.hset    @key, "key", @key
