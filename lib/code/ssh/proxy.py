@@ -21,7 +21,10 @@ class Server(base.Server):
 
         url = urlparse(os.environ.get("DIRECTOR_API_URL"))
         self.api_key = url.password
-        self.api_url = "%s://%s:%s%s" % (url.scheme, url.hostname, url.port, url.path)
+        self.api_url = "%s://%s" % (url.scheme, url.hostname)
+        if url.port:
+            self.api_url += ":%s" % url.port
+        self.api_url += url.path
 
     def authHeader(self, username):
         auth = base64.b64encode("%s:%s" % (urllib.quote(username), self.api_key))
