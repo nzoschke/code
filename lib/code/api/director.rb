@@ -126,7 +126,7 @@ module Code
           ENV["S3_URL"] = "#{S3_BUCKET}/slugs/#{uuid}.tgz"
           env.merge!({
             "SLUG_URL"     => "#{S3_BUCKET.gsub(/^s3/, "https")}.s3.amazonaws.com/slugs/#{uuid}.tgz",
-            "SLUG_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"])
+            "SLUG_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"]).read.strip
           })
 
           ENV["S3_URL"] = "#{S3_BUCKET}/caches/#{@app_name}.tgz"
@@ -156,6 +156,7 @@ module Code
               "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
             })
             cmd = "bin/#{@type}-compiler"
+            puts env.inspect, cmd.inspect
             pid = Process.spawn(env, cmd, unsetenv_others: true)
           end
 
