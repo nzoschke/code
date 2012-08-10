@@ -119,9 +119,15 @@ module Code
 
           env = {
             "BUILD_CALLBACK_URL"  => "",
-            "BUILD_PUT_URL"       => "",
             "CALLBACK_URL"        => "#{DIRECTOR_API_URL}/session/#{@sid}",
           }
+
+          uuid = SecureRandom.uuid
+          ENV["S3_URL"] = "#{S3_BUCKET}/slugs/#{uuid}.tgz"
+          env.merge!({
+            "SLUG_URL"     => "https://#{S3_BUCKET}.s3.amazonaws.com/slugs/#{uuid}.tgz"
+            "SLUG_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"])
+          })
 
           ENV["S3_URL"] = "#{S3_BUCKET}/caches/#{@app_name}.tgz"
           env.merge!({
