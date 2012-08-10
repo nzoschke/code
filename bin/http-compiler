@@ -1,5 +1,11 @@
 #!/usr/bin/env ruby
 
+APP_DIR     ||= File.expand_path(File.join(__FILE__, "..", ".."))
+SYSTEM      ||= `echo $(uname)-$(uname -m)`.strip # Darwin-x86_64, Linux-x86_64, etc.
+ENV["PATH"]   = "#{APP_DIR}/vendor/#{SYSTEM}:#{ENV["PATH"]}" unless ENV["PATH"] =~ /#{SYSTEM}/
+
+print ENV["PATH"]
+
 $:.unshift(
   File.expand_path(
     File.join(__FILE__, "..", "..", "lib")
