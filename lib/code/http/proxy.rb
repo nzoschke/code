@@ -15,12 +15,11 @@ module Code
           @api ||= Excon.new(DIRECTOR_API_URL)
         end
 
-        def protected!(app_name)
-          halt 404, "Not found\n" unless app_name =~ /^[a-z][a-z0-9-]+$/
+        def protected!
+          @app_name = params[:app_name]
+          halt 404, "Not found\n" unless @app_name =~ /^[a-z][a-z0-9-]+$/
 
           # TODO: auth against core
-
-          @app_name = app_name
         end
 
         def proxy(hostname, port=80, username=nil, password=nil)
@@ -42,11 +41,15 @@ module Code
           end
         end
 
-        def proxy_session(app_name)
-          protected!(app_name)
+        def proxy_session(opts={method: :get})
+          protected!
 
-          # get existing compiler session
-          response  = api.get(path: "/compiler/#{app_name}", query: {type: "http"})
+          # create (:post) or use existing (:get) compiler session
+          opts.merge!({
+            path: "/compiler/#{@app_name}",
+            query: {type: "http"}
+          })
+          response = api.request(opts)
           halt 502, "Error\n" unless response.status == 200
 
           route = JSON.parse(response.body)
@@ -57,24 +60,15 @@ module Code
       end
 
       get "/:app_name.git/info/refs" do
-        protected!(params["app_name"])
-
-        # create (or get existing) compiler session
-        response  = api.post(path: "/compiler/#{@app_name}", query: {type: "http"})
-        halt 502, "Error\n" unless response.status == 200
-
-        route = JSON.parse(response.body)
-        return proxy(route["hostname"], route["port"], route["username"], route["password"]) if route["hostname"]
-
-        halt 503, "No compiler available\n"
+        proxy_session(method: :post)
       end
 
       post "/:app_name.git/git-receive-pack" do
-        proxy_session(params["app_name"])
+        proxy_session
       end
 
       post "/:app_name.git/git-upload-pack" do
-        proxy_session(params["app_name"])
+        proxy_session
       end
     end
   end
