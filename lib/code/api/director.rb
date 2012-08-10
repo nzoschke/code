@@ -125,7 +125,7 @@ module Code
           uuid = SecureRandom.uuid
           ENV["S3_URL"] = "#{S3_BUCKET}/slugs/#{uuid}.tgz"
           env.merge!({
-            "SLUG_URL"     => "https://#{S3_BUCKET}.s3.amazonaws.com/slugs/#{uuid}.tgz"
+            "SLUG_URL"     => "#{S3_BUCKET.gsub(/^s3/, "https")}.s3.amazonaws.com/slugs/#{uuid}.tgz",
             "SLUG_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"])
           })
 
