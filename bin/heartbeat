@@ -311,7 +311,6 @@ def has_child(pid, comm_p)
   return false
 end
 
-
 begin
   uri  = URI.parse ENV["CALLBACK_URL"]
   http = Net::HTTP.new(uri.host, uri.port)
