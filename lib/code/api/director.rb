@@ -1,5 +1,5 @@
 require "cgi"
-require 'heroku-api'
+require "heroku-api"
 require "json"
 require "net/ssh"
 require "openssl"

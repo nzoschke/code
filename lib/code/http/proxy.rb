@@ -1,6 +1,7 @@
 require "code/config"
 require "excon"
 require "json"
+require "heroku-api"
 require "rack/streaming_proxy"
 require "sinatra"
 
@@ -19,7 +20,19 @@ module Code
           @app_name = params[:app_name]
           halt 404, "Not found\n" unless @app_name =~ /^[a-z][a-z0-9-]+$/
 
-          # TODO: auth against core
+          @auth ||= Rack::Auth::Basic::Request.new(request.env)
+          unless @auth.provided? && @auth.basic? && @auth.credentials
+            response["WWW-Authenticate"] = %(Basic realm="Restricted Area")
+            halt 401, "Not authorized\n" 
+          end
+
+          begin
+            heroku = Heroku::API.new(:api_key => @auth.credentials[1])
+            heroku.get_app(@app_name)
+          rescue Heroku::API::Errors::ErrorWithResponse => e
+            response["WWW-Authenticate"] = %(Basic realm="Restricted Area")
+            halt 401, "Not authorized\n" 
+          end
         end
 
         def proxy(hostname, port=80, username=nil, password=nil)
