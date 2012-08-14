@@ -23,4 +23,3 @@ if [ ! -d "$GIT_DIR" ]; then
   cp pre-receive.sh   $GIT_DIR/hooks/pre-receive
   cp post-receive.sh  $GIT_DIR/hooks/post-receive
 fi
-
