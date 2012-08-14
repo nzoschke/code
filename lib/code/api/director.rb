@@ -141,7 +141,6 @@ module Code
             heroku.post_ps("code-compiler", cmd, :ps_env => env) # TODO: config var for app name
           else
             env.merge!({
-              "ANVIL_DIR" => File.expand_path(File.join(__FILE__, "..", "..", "..", "..", "vendor/anvil")),
               "PATH"      => ENV["PATH"],
               "PORT"      => (6000 + rand(100)).to_s,
             })
