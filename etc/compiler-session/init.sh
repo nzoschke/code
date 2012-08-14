@@ -1,25 +1,24 @@
 #!/bin/bash
 set -e
+#exec 1>&3 2>&3
 
 function log() {
-  echo app=codon file=init.sh pwd=$(pwd) "$@" >&3
+  echo app=codon file=init.sh pwd=$(pwd) "$@" 1>&3
 }
 
-export GIT_DIR=$(pwd)/repo.git
-
-if [ ! -d "$GIT_DIR" ]; then
-  # TODO: replace with bin/s3 call!
+if [ ! -f repo/HEAD ]; then
+  # TODO: replace with bin/s3 call!?
   log fn=get_repo
   HTTP_CODE=$(curl -K curl_get_repo.conf)
   log fn=get_repo code=$HTTP_CODE
 
   (
-    git bundle verify file.bundle \
-      && git clone --bare file.bundle $GIT_DIR \
-      || git init  --bare $GIT_DIR
+    git bundle verify repo/bundle \
+    && git clone --bare repo/bundle repo \
+    || git init --bare repo 
   ) 1>&3 2>&3
 
-  mkdir -p            $GIT_DIR/hooks
-  cp pre-receive.sh   $GIT_DIR/hooks/pre-receive
-  cp post-receive.sh  $GIT_DIR/hooks/post-receive
+  mkdir -p            repo/hooks
+  cp pre-receive.sh   repo/hooks/pre-receive
+  cp post-receive.sh  repo/hooks/post-receive
 fi

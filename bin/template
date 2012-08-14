@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import shutil
 from string import Template
 import sys
 import tempfile
@@ -30,24 +31,32 @@ else:
 mapping = {v:os.environ.get(v) for v in args.var}
 mapping["DEST_DIR"] = dest_dir
 
-for l in os.listdir(src_dir):
-  conf = ""
-  src  = os.path.join(src_dir,  l)
-  dest = os.path.join(dest_dir, l)
+for dirpath, dirnames, filenames in os.walk(src_dir):
+  dest_subdir = dirpath[len(src_dir) + 1:] # remove src_dir prefix
 
-  with open(src, "r") as f:
-    conf = f.read()
-    if src.endswith(".conf"):
-      try:
-        conf = Template(conf).substitute(mapping)
-      except KeyError, e:
-        print "error: no value for %s in %s" % (e, l)
-        sys.exit(1)
+  for dirname in dirnames:
+    os.mkdir(os.path.join(dest_dir, dest_subdir, dirname))
 
-  with open(dest, "w") as f:
-    f.write(conf)
-    if src.endswith(".sh"):
-      os.chmod(dest, 0700)
+  for filename in filenames:
+    src  = os.path.join(dirpath, filename)
+    dest = os.path.join(dest_dir, dest_subdir, filename)
+
+    if src.endswith(".tmpl"):
+      tmpl = ""
+
+      with open(src, "r") as f:
+        tmpl = f.read()
+        try:
+          tmpl = Template(tmpl).substitute(mapping)
+          dest = dest[:-5] # remove .tmpl suffix
+        except KeyError, e:
+          print "error: no value for %s in %s" % (e, filename)
+          sys.exit(1)
+
+      with open(dest, "w") as f:
+        f.write(tmpl)
+    else:
+      shutil.copy(src, dest)
 
 print dest_dir
 sys.exit(0)
