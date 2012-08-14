@@ -12,17 +12,17 @@ require "code/config"
 module Code
   module API
     class Director < Sinatra::Application
-      DIRECTOR_API_URI            = URI.parse(Config.env("DIRECTOR_API_URL"))
+      DIRECTOR_API_URI            = URI.parse(Code::Config.env("DIRECTOR_API_URL"))
       DIRECTOR_API_KEY            = DIRECTOR_API_URI.password
       DIRECTOR_API_URL            = "#{DIRECTOR_API_URI.scheme}://#{DIRECTOR_API_URI.host}:#{DIRECTOR_API_URI.port}"
-      HEROKU_API_URL              = Config.env("HEROKU_API_URL", default: nil)
-      REDIS_URL                   = Config.env("REDIS_URL")
-      S3_URI                      = URI.parse(Config.env("S3_URL"))
+      HEROKU_API_URL              = Code::Config.env("HEROKU_API_URL", default: nil)
+      REDIS_URL                   = Code::Config.env("REDIS_URL")
+      S3_URI                      = URI.parse(Code::Config.env("S3_URL"))
       ENV["S3_ACCESS_KEY_ID"]     = S3_URI.user
       ENV["S3_SECRET_ACCESS_KEY"] = CGI::unescape(S3_URI.password)
       S3_BUCKET                   = S3_URI.host
-      SESSION_KEY_SALT            = Config.env("SESSION_KEY_SALT")
-      SESSION_TIMEOUT             = Config.env("SESSION_TIMEOUT", default: 30)
+      SESSION_KEY_SALT            = Code::Config.env("SESSION_KEY_SALT")
+      SESSION_TIMEOUT             = Code::Config.env("SESSION_TIMEOUT", default: 30)
 
       helpers do
         def authorized_fingerprint?

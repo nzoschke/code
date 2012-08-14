@@ -5,8 +5,8 @@ require "git_http"
 module Code
   module HTTP
     class Compiler
-      CALLBACK_URL  = Config.env("CALLBACK_URL")
-      PORT          = Config.env("PORT")
+      CALLBACK_URL  = Code::Config.env("CALLBACK_URL")
+      PORT          = Code::Config.env("PORT")
 
       def initialize
         $session_dir ||= IO.popen([
