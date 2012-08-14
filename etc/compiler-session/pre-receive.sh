@@ -1,13 +1,11 @@
 #!/bin/bash
 echo "Heroku receiving push..."
 
-GIT_DIR=$(pwd)
-WORK_DIR=$(dirname $GIT_DIR)/app # GIT_WORKING_TREE ?
-
 read oldrev newrev ref
 
-mkdir -p $WORK_DIR
-git --work-tree=$WORK_DIR checkout -f $newrev 2>/dev/null
-cd ${ANVIL_DIR:-/app/vendor/anvil}
-bin/compile $WORK_DIR
-bin/stow    $WORK_DIR
+mkdir -p ../app
+git --work-tree=../app checkout -f $newrev 2>/dev/null
+
+cd ../anvil
+bin/compile ../app
+bin/stow    ../app

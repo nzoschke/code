@@ -13,8 +13,8 @@ if [ ! -f repo/HEAD ]; then
   log fn=get_repo code=$HTTP_CODE
 
   (
-    git bundle verify repo/bundle \
-    && git clone --bare repo/bundle repo \
+    git bundle verify bundle \
+    && git clone --bare bundle repo \
     || git init --bare repo 
   ) 1>&3 2>&3
 
