@@ -72,7 +72,6 @@ module Code
 
           route = redis.hgetall @key
           redis.expire @key, SESSION_TIMEOUT
-          print route.inspect
 
           if @type == "ssh"
             return <<-EOF.unindent
@@ -156,7 +155,6 @@ module Code
               "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
             })
             cmd = "bin/#{@type}-compiler"
-            puts env.inspect, cmd.inspect
             pid = Process.spawn(env, cmd, unsetenv_others: true)
           end
 
