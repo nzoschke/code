@@ -1,14 +1,13 @@
 module Code
   module Config
     def self.env(k, opts={})
-      opts = { required: true }.merge(opts)
-
-      unless v = ENV[k]
-        v = opts[:default]
-        abort("error: require #{k}") if opts[:required] && !v
+      if v = ENV[k]
+        return v
       end
 
-      v
+      abort("error: require #{k}") unless opts.has_key? :default
+
+      opts[:default]
     end
   end
 end

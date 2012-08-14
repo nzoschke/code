@@ -9,6 +9,7 @@ module Code
   module HTTP
     class Proxy < Sinatra::Application
       DIRECTOR_API_URL        = Config.env("DIRECTOR_API_URL")
+      HEROKU_API_URL          = Config.env("HEROKU_API_URL", default: nil)
       SESSION_TIMEOUT         = Config.env("SESSION_TIMEOUT", default: 30)
 
       helpers do
@@ -19,6 +20,8 @@ module Code
         def protected!
           @app_name = params[:app_name]
           halt 404, "Not found\n" unless @app_name =~ /^[a-z][a-z0-9-]+$/
+
+          return true unless HEROKU_API_URL
 
           @auth ||= Rack::Auth::Basic::Request.new(request.env)
           unless @auth.provided? && @auth.basic? && @auth.credentials

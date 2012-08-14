@@ -17,14 +17,17 @@ module Code
         "25:25:85:78:31:f7:6e:46:04:9a:08:9b:8a:11:5c:a7" => ["code", "gentle-snow-22"]
       }
 
-      DIRECTOR_API_URI        = URI.parse(Config.env("DIRECTOR_API_URL"))
-      DIRECTOR_API_KEY        = DIRECTOR_API_URI.password
-      DIRECTOR_API_URL        = "#{DIRECTOR_API_URI.scheme}://#{DIRECTOR_API_URI.host}:#{DIRECTOR_API_URI.port}"
-      HEROKU_API_KEY          = Config.env("HEROKU_API_KEY")
-      REDIS_URL               = Config.env("REDIS_URL")
-      S3_BUCKET               = Config.env("S3_BUCKET")
-      SESSION_KEY_SALT        = Config.env("SESSION_KEY_SALT")
-      SESSION_TIMEOUT         = Config.env("SESSION_TIMEOUT", default: 30)
+      DIRECTOR_API_URI            = URI.parse(Config.env("DIRECTOR_API_URL"))
+      DIRECTOR_API_KEY            = DIRECTOR_API_URI.password
+      DIRECTOR_API_URL            = "#{DIRECTOR_API_URI.scheme}://#{DIRECTOR_API_URI.host}:#{DIRECTOR_API_URI.port}"
+      HEROKU_API_URL              = Config.env("HEROKU_API_URL", default: nil)
+      REDIS_URL                   = Config.env("REDIS_URL")
+      S3_URI                      = URI.parse(Config.env("S3_URL"))
+      ENV["S3_ACCESS_KEY_ID"]     = S3_URI.user
+      ENV["S3_SECRET_ACCESS_KEY"] = S3_URI.password   
+      S3_BUCKET                   = "s3://#{S3_URI.host}"
+      SESSION_KEY_SALT            = Config.env("SESSION_KEY_SALT")
+      SESSION_TIMEOUT             = Config.env("SESSION_TIMEOUT", default: 30)
 
       helpers do
         def authorized_fingerprint?
@@ -46,7 +49,7 @@ module Code
         end
 
         def heroku
-          $heroku ||= Heroku::API.new(:api_key => HEROKU_API_KEY)
+          $heroku ||= Heroku::API.new(:api_key => URI.parse(HEROKU_API_URL).password)
         end
 
         def protected!
@@ -146,10 +149,11 @@ module Code
             env.merge!({"SSH_PUB_KEY" => "#{ssh_key.ssh_type} #{data}"})
           end
 
-          if ENV["COMPILE_HEROKU"]
+          if HEROKU_API_URL
             heroku.post_ps("code-compiler", "#{@type}_compiler", :ps_env => env) # TODO: config var for app name
           else
             env.merge!({
+              "ANVIL_DIR"   => File.expand_path(File.join(__FILE__, "..", "..", "..", "..", "vendor/anvil")),
               "PATH"        => ENV["PATH"],
               "PORT"        => (6000 + rand(100)).to_s,
               "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
