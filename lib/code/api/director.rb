@@ -57,10 +57,10 @@ module Code
             halt 401, "Not authorized\n"
           end
 
-          @app_name = params[:app_name]
-          @type     = params["type"]
-          @sid      = hash("#{@app_name}_#{@type}")
-          @key      = "session.#{@sid}"
+          @app_name   = params[:app_name]
+          @proto      = params[:proto]
+          @sid        = hash("#{@app_name}_#{@proto}")
+          @key        = "session.#{@sid}"
           @reply_key  = "#{@key}.reply"
 
           halt 404, "Not found\n" unless @app_name =~ /^[a-z][a-z0-9-]+$/
@@ -76,7 +76,7 @@ module Code
           route = redis.hgetall @key
           redis.expire @key, SESSION_TIMEOUT
 
-          if @type == "ssh"
+          if @proto == "ssh"
             return <<-EOF.unindent
               HostName="#{route["hostname"]}"
               Port="#{route["port"]}"
@@ -106,19 +106,19 @@ module Code
         end
       end
 
-      get "/compiler/:app_name" do
+      get "/compiler/:proto/:app_name" do
         protected!
         session
       end
 
-      post "/compiler/:app_name" do
+      post "/compiler/:proto/:app_name" do
         protected!
 
         if !redis.exists(@key)
           redis.hset    @key, "key", @key
           redis.expire  @key, SESSION_TIMEOUT
 
-          cmd = "bin/#{@type}-compiler"
+          cmd = "bin/#{@proto}-compiler"
           uuid = SecureRandom.uuid
 
           env = {
@@ -131,7 +131,7 @@ module Code
             "SLUG_URL"      => "https://#{S3_BUCKET}.s3.amazonaws.com/slugs/#{uuid}.tgz"
           }
 
-          if @type == "ssh"
+          if @proto == "ssh"
             k = SSHKey.generate
             env.merge! "SSH_PUB_KEY" => k.ssh_public_key
             redis.hmset @key, "private_key", k.private_key

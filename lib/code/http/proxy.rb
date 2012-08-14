@@ -60,10 +60,7 @@ module Code
           protected!
 
           # create (:post) or use existing (:get) compiler session
-          opts.merge!({
-            path: "/compiler/#{@app_name}",
-            query: {type: "http"}
-          })
+          opts.merge! path: "/compiler/http/#{@app_name}"
           response = api.request(opts)
           halt 502, "Error\n" unless response.status == 200
 
