@@ -230,7 +230,7 @@ if __name__ == "__main__":
 
   argv = sys.argv[1:]
 
-  if os.environ.get("S3_URL"):
+  if os.environ.get("S3_URL") and len(argv) == 1:
     argv += [os.environ["S3_URL"]]
 
   if os.environ.get("S3_FILE"):

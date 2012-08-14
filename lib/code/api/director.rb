@@ -1,10 +1,9 @@
 require "cgi"
 require "heroku-api"
 require "json"
-require "net/ssh"
-require "openssl"
 require "redis"
 require "sinatra"
+require "sshkey"
 require "uri"
 
 require "code"
@@ -13,10 +12,6 @@ require "code/config"
 module Code
   module API
     class Director < Sinatra::Application
-      ACLS = {
-        "25:25:85:78:31:f7:6e:46:04:9a:08:9b:8a:11:5c:a7" => ["code", "gentle-snow-22"]
-      }
-
       DIRECTOR_API_URI            = URI.parse(Config.env("DIRECTOR_API_URL"))
       DIRECTOR_API_KEY            = DIRECTOR_API_URI.password
       DIRECTOR_API_URL            = "#{DIRECTOR_API_URI.scheme}://#{DIRECTOR_API_URI.host}:#{DIRECTOR_API_URI.port}"
@@ -24,8 +19,8 @@ module Code
       REDIS_URL                   = Config.env("REDIS_URL")
       S3_URI                      = URI.parse(Config.env("S3_URL"))
       ENV["S3_ACCESS_KEY_ID"]     = S3_URI.user
-      ENV["S3_SECRET_ACCESS_KEY"] = S3_URI.password   
-      S3_BUCKET                   = "s3://#{S3_URI.host}"
+      ENV["S3_SECRET_ACCESS_KEY"] = CGI::unescape(S3_URI.password)
+      S3_BUCKET                   = S3_URI.host
       SESSION_KEY_SALT            = Config.env("SESSION_KEY_SALT")
       SESSION_TIMEOUT             = Config.env("SESSION_TIMEOUT", default: 30)
 
@@ -36,7 +31,10 @@ module Code
           return false unless @auth.credentials[1] == DIRECTOR_API_KEY
 
           @fingerprint = CGI::unescape(@auth.credentials[0])
-          !!ACLS[@fingerprint]
+
+          return true unless HEROKU_API_URL
+
+          # TODO: Fingerprint lookup
         end
 
         def authorized_key?
@@ -45,6 +43,7 @@ module Code
         end
 
         def hash(key)
+          # TODO: SecureKey
           OpenSSL::PKCS5::pbkdf2_hmac_sha1(key, SESSION_KEY_SALT, 1000, 24).unpack("H*")[0]
         end
 
@@ -62,6 +61,7 @@ module Code
           @type     = params["type"]
           @sid      = hash("#{@app_name}_#{@type}")
           @key      = "session.#{@sid}"
+          @reply_key  = "#{@key}.reply"
 
           halt 404, "Not found\n" unless @app_name =~ /^[a-z][a-z0-9-]+$/
         end
@@ -81,18 +81,17 @@ module Code
               HostName="#{route["hostname"]}"
               Port="#{route["port"]}"
               ##
-              #{route["ssh_key"]}
+              #{route["private_key"]}
               ##
               [#{route["hostname"]}]:#{route["port"]} ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAGEArzJx8OYOnJmzf4tfBEvLi8DVPrJ3/c9k2I/Az64fxjHf9imyRJbixtQhlH9lfNjUIx+4LmrJH5QNRsFporcHDKOTwTTYLh5KmRpslkYHRivcJSkbh/C+BR3utDS555mV
             EOF
           else
             return JSON.dump(route)
           end
-
         end
 
-        def verify_session!(sid)
-          @sid        = sid
+        def verify_session!
+          @sid        = params["sid"]
           @key        = "session.#{@sid}"
           @reply_key  = "#{@key}.reply"
 
@@ -119,80 +118,62 @@ module Code
           redis.hset    @key, "key", @key
           redis.expire  @key, SESSION_TIMEOUT
 
+          cmd = "bin/#{@type}-compiler"
+          uuid = SecureRandom.uuid
+
           env = {
-            "BUILD_CALLBACK_URL"  => "",
-            "CALLBACK_URL"        => "#{DIRECTOR_API_URL}/session/#{@sid}",
+            "CALLBACK_URL"  => "#{DIRECTOR_API_URL}/session/#{@sid}",
+            "CACHE_GET_URL" => IO.popen(["bin/s3", "get", "s3://#{S3_BUCKET}/caches/#{@app_name}.tgz"]).read.strip,
+            "CACHE_PUT_URL" => IO.popen(["bin/s3", "put", "s3://#{S3_BUCKET}/caches/#{@app_name}.tgz", "--ttl=3600"]).read.strip,
+            "REPO_GET_URL"  => IO.popen(["bin/s3", "get", "s3://#{S3_BUCKET}/repos/#{@app_name}.bundle"]).read.strip,
+            "REPO_PUT_URL"  => IO.popen(["bin/s3", "put", "s3://#{S3_BUCKET}/repos/#{@app_name}.bundle", "--ttl=3600"]).read.strip,
+            "SLUG_PUT_URL"  => IO.popen(["bin/s3", "put", "s3://#{S3_BUCKET}/slugs/#{uuid}.tgz", "--ttl=3600"]).read.strip,
+            "SLUG_URL"      => "https://#{S3_BUCKET}.s3.amazonaws.com/slugs/#{uuid}.tgz"
           }
 
-          uuid = SecureRandom.uuid
-          ENV["S3_URL"] = "#{S3_BUCKET}/slugs/#{uuid}.tgz"
-          env.merge!({
-            "SLUG_URL"     => "#{S3_BUCKET.gsub(/^s3/, "https")}.s3.amazonaws.com/slugs/#{uuid}.tgz",
-            "SLUG_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"]).read.strip
-          })
-
-          ENV["S3_URL"] = "#{S3_BUCKET}/caches/#{@app_name}.tgz"
-          env.merge!({
-            "CACHE_GET_URL" => IO.popen(["bin/s3", "get"]).read.strip,
-            "CACHE_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"]).read.strip,
-          })
-
-          ENV["S3_URL"] = "#{S3_BUCKET}/repos/#{@app_name}.bundle"
-          env.merge!({
-            "REPO_GET_URL" => IO.popen(["bin/s3", "get"]).read.strip,
-            "REPO_PUT_URL" => IO.popen(["bin/s3", "put", "--ttl=3600"]).read.strip,
-          })
-
           if @type == "ssh"
-            ssh_key     = OpenSSL::PKey::RSA.new 2048
-            data        = [ssh_key.to_blob].pack("m0")
-            env.merge!({"SSH_PUB_KEY" => "#{ssh_key.ssh_type} #{data}"})
+            k = SSHKey.generate
+            env.merge! "SSH_PUB_KEY" => k.ssh_public_key
+            redis.hmset @key, "private_key", k.private_key
           end
 
           if HEROKU_API_URL
-            heroku.post_ps("code-compiler", "#{@type}_compiler", :ps_env => env) # TODO: config var for app name
+            heroku.post_ps("code-compiler", cmd, :ps_env => env) # TODO: config var for app name
           else
             env.merge!({
-              "ANVIL_DIR"   => File.expand_path(File.join(__FILE__, "..", "..", "..", "..", "vendor/anvil")),
-              "PATH"        => ENV["PATH"],
-              "PORT"        => (6000 + rand(100)).to_s,
-              "VIRTUAL_ENV" => ENV["VIRTUAL_ENV"]
+              "ANVIL_DIR" => File.expand_path(File.join(__FILE__, "..", "..", "..", "..", "vendor/anvil")),
+              "PATH"      => ENV["PATH"],
+              "PORT"      => (6000 + rand(100)).to_s,
             })
-            cmd = "bin/#{@type}-compiler"
-            pid = Process.spawn(env, cmd, unsetenv_others: true)
+
+            Process.spawn(env, cmd, unsetenv_others: true)
           end
 
           # wait for compiler session callback
           k, v = redis.brpop "#{@key}.reply", SESSION_TIMEOUT
           halt 503, "No compiler available\n" if !v
-
-          redis.hmset @key, "ssh_key", ssh_key if @type == "ssh"
         end
 
         session
       end
 
       put "/session/:sid" do
-        verify_session!(params["sid"])
-
+        verify_session!
         redis.hmset   @key, "hostname", params["hostname"], "port", params["port"], "username", params["username"], "password", params["password"]
         redis.expire  @key, SESSION_TIMEOUT
         redis.rpush   @reply_key, "ok"
         redis.expire  @reply_key, SESSION_TIMEOUT
-
         "ok"
       end
 
       head "/session/:sid" do
-        verify_session!(params["sid"])
+        verify_session!
         "ok"
       end
 
       delete "/session/:sid" do
-        verify_session!(params["sid"])
-
+        verify_session!
         redis.del @key, @reply_key
-
         "ok"
       end
     end

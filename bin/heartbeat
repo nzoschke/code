@@ -324,7 +324,7 @@ begin
     curl = has_child(ppid, /^curl/)
     git  = has_child(ppid, /^git/)
     puts "app=codon file=heartbeat fn=main ppid=#{ppid} curl=#{curl} git=#{git}"
-    http.request(put) if git # keep session alive
+    http.request(put) if git || curl # keep session alive
 
     # test if session has expired and self-destruct
     if http.request(head).code == "404"
