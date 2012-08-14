@@ -158,7 +158,7 @@ module Code
 
       put "/session/:sid" do
         verify_session!
-        redis.hmset   @key, "hostname", params["hostname"], "port", params["port"], "username", params["username"], "password", params["password"]
+        redis.hmset   @key, "hostname", params["hostname"], "port", params["port"], "username", params["username"], "password", params["password"] if params["hostname"]
         redis.expire  @key, SESSION_TIMEOUT
         redis.rpush   @reply_key, "ok"
         redis.expire  @reply_key, SESSION_TIMEOUT
