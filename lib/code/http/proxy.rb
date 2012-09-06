@@ -41,7 +41,7 @@ module Code
         def proxy(hostname, port=80, username=nil, password=nil)
           req  = Rack::Request.new(env)
           auth = [username, password].join(":")
-          uri  = "#{env["rack.url_scheme"]}://#{auth}@#{hostname}:#{port}"
+          uri  = "http://#{auth}@#{hostname}:#{port}"
           uri += env["PATH_INFO"]
           uri += "?" + env["QUERY_STRING"] unless env["QUERY_STRING"].empty?
 
