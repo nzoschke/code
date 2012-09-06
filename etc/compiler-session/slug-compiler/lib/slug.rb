@@ -6,6 +6,7 @@ require "yaml"
 require "net/http"
 require "net/https"
 require "iconv"
+require "securerandom"
 
 require "utils"
 require "repo_lock"
@@ -16,7 +17,7 @@ class Slug
 
   def initialize(options)
     @meta = options[:meta]
-    @compile_id = rand(2**64).to_s(36)
+    @compile_id = SecureRandom.hex
     @repo_dir = options[:repo_dir].chomp("/")
     @input_tar = options[:input_tar]
     @head = resolve_ref(options[:head])
@@ -104,7 +105,7 @@ class Slug
         prune_build_dir
         process_slugignore
         configure_environment
-        fetch_buildpack
+        fetch_buildpacks
         detect_buildpack
         message_buildpack
         run_buildpack
@@ -169,22 +170,36 @@ class Slug
     classes.map { |klass| klass.new(build_dir, cache_dir_path, user_env) }
   end
 
-  def fetch_buildpack
-    return unless buildpack_url
+  def fetch_buildpacks
+    if buildpack_url
+      fetch_buildpack(buildpack_url)
+    else
+      ["ruby", "nodejs", "clojure", "python", "java", "gradle", "grails", "scala", "play", "php"].each do |name|
+        bucket = ENV["BUILDPACK_BUCKET"] || "codon-buildpacks"
+        url = "http://#{bucket}.s3.amazonaws.com/buildpacks/heroku/#{name}.tgz"
+        fetch_buildpack(url)
+      end
+    end
+  end
+
+  def fetch_buildpack(buildpack_url)
     log("fetch_buildpack") do
       Utils.clear_var("GIT_DIR") do
-        Utils.bash("mkdir -p #{buildpack_dir}")
+        uri  = URI.parse(buildpack_url)
+        name = uri.path.split("/")[-1].split(".")[0]
+        dir  = "#{buildpack_dir}/#{name}"
+        Utils.bash("mkdir -p #{dir}")
         if buildpack_url =~ /\.(tgz|tar\.gz)$/
-          message("-----> Fetching custom tar buildpack... ")
+          message("-----> Fetching custom tar buildpack (#{name})... ")
           curl_opts = [["max-time", 90], ["url", buildpack_url], ["silent"], ["retry", 3]]
-          command = "curl --config %s | tar xz -C #{buildpack_dir}"
+          command = "curl --config %s | tar xz -C #{dir}"
           exit_status, out = Utils.with_conf(curl_opts) { |path| Utils.bash(command % path) }
         else
           begin
             message("-----> Fetching custom git buildpack... ")
             url, treeish = buildpack_url.split("#")
-            Utils.bash("cd #{buildpack_dir}; git clone '#{url}' .", 10)
-            Utils.bash("cd #{buildpack_dir}; git checkout #{treeish}") if treeish
+            Utils.bash("cd #{dir}; git clone '#{url}' .", 10)
+            Utils.bash("cd #{dir}; git checkout #{treeish}") if treeish
           rescue => e
             message("failed\n")
             raise(CompileError, "error fetching custom buildpack")
@@ -206,8 +221,7 @@ class Slug
         # lib/receiver.rb; need to keep them in sync.
         defaults = ["ruby", "nodejs", "clojure", "python", "java", "gradle",
                     "grails", "scala", "play", "php"]
-        paths = defaults.map {|d| File.join(File.dirname(__FILE__), "..", "..",
-                                            "tmp", "buildpacks", d)}
+        paths = defaults.map {|d| File.join(buildpack_dir, d)}
         packs = paths.map {|path| BuildPack::Custom.new(path, build_dir, cache_dir_path, user_env)}
       elsif cedar?
         packs = buildpacks(cedar_buildpack_classes)

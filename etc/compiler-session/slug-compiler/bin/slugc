@@ -11,6 +11,7 @@ require "pathname"
 rootpath = Pathname.new($0).realpath.dirname.dirname.to_s
 $LOAD_PATH.unshift "#{rootpath}/lib"
 
+require "okjson"
 require "slug"
 
 # default args
@@ -60,7 +61,7 @@ head = "master"  if (head.nil? || head.empty?)
 # compile the slug
 slug = nil
 begin
-  meta = meta_path ? YAML.load(File.read(meta_path)) : {"stack" => stack}
+  meta = meta_path ? OkJson.decode(File.read(meta_path)) : {"stack" => stack}
   slug = Slug.new(:head => head, :prev => prev, :repo_dir => repo_dir, :input_tar => input_tar, :build_dir => output_dir, :slug_file => output_slug, :release_file => output_release, :meta => meta)
   slug.log("bin at=start")
   slug.lock do
