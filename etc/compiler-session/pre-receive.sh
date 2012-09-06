@@ -1,11 +1,10 @@
 #!/bin/bash
+export PATH=/usr/local/bin/:$PATH # prefer homebrew ruby 1.9.X
+
 echo "Heroku receiving push..."
+
+HTTP_CODE=$(curl -K ../curl_get_release.conf)
 
 read oldrev newrev ref
 
-mkdir -p ../app
-git --work-tree=../app checkout -f $newrev 2>/dev/null
-
-cd ../anvil
-bin/compile ../app
-bin/stow    ../app
+../slug-compiler/bin/slugc -t --range=$oldrev..$newrev --meta=../push_metadata.json --deploy-hooks --repo-dir=$(pwd)
