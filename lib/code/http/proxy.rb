@@ -61,7 +61,9 @@ module Code
           protected!
 
           # create (:post) or use existing (:get) compiler session
+          # when creating a session, pass the director the heroku API key for requesting release tokens
           opts.merge! path: "/compiler/http/#{@app_name}"
+          opts.merge! body: "api_key=#{@auth.credentials[1]}" if opts[:method] == :post
           response = api.request(opts)
           halt 502, "Error\n" unless response.status == 200
 

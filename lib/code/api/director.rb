@@ -116,6 +116,7 @@ module Code
 
         if !redis.exists(@key)
           redis.hset    @key, "key", @key
+          redis.hmset   @key, "app_name", @app_name, "api_key", params["api_key"] if params["api_key"]
           redis.expire  @key, SESSION_TIMEOUT
 
           cmd = "bin/#{@proto}-compiler"
