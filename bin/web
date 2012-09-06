@@ -1,5 +1,4 @@
 #!/bin/bash
-set -x
 
-[ "$PROXY" ] && exec bundle exec bin/http-proxy
-                exec bundle exec bin/director
+[ "$PROXY" ] && exec bin/http-proxy
+                exec bin/director
