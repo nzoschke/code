@@ -1,0 +1,41 @@
+#!/usr/bin/env ruby
+
+# The hook script is invoked with one line per branch/tag/ref that's pushed on
+# STDIN. Each line has the following format:
+#
+#   PREV-HEAD NEW-HEAD REF
+#
+# PREV-HEAD is the SHA of the previous HEAD, NEW-HEAD is the SHA of the new
+# HEAD, and REF is branch or tag ref (.e.g, "refs/heads/master") that's
+# being pushed.
+line = STDIN.read.
+  split("\n").
+  grep(/\s+refs\/heads\/master$/).
+  first
+
+# Do nothing if no new master branch HEAD was pushed.
+exit 0 if line.nil?
+
+# Parse the <OLD> <NEW> <REF> line into its parts.
+prev, head, ref = line.chomp.split(/\s+/)
+
+# Setup PATH for slugc execution
+require 'pathname'
+
+rootpath = Pathname.new($0).realpath.dirname.dirname.to_s
+ENV['PATH'] = "#{rootpath}/bin:#{ENV['PATH']}"
+
+app_id = File.basename(Dir.pwd)
+meta_file = "/tmp/#{app_id}_push_metadata.yml"
+
+File.umask(077)
+
+command = [
+  "slugc",
+  "--range=#{prev}..#{head}",
+  "--meta=#{meta_file}",
+  "--deploy-hooks",
+  "--repo-dir=#{Dir.pwd}"
+].compact
+
+exec *command

@@ -1,3 +1,0 @@
-[submodule "etc/compiler-session/anvil"]
-	path = etc/compiler-session/anvil
-	url = git://github.com/ddollar/anvil.git

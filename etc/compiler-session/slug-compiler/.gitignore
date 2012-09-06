@@ -1,0 +1,8 @@
+\#*
+.#*
+*.swp
+.emacs*
+.DS_Store
+.bundle
+tags
+/buildpacks/tar/

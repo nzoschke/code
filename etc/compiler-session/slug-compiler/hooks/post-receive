@@ -1,0 +1,52 @@
+#!/usr/bin/env ruby
+
+require "yaml"
+
+require "pathname"
+rootpath = Pathname.new($0).realpath.dirname.dirname.to_s
+$:.unshift("#{rootpath}/lib")
+
+require "utils"
+
+module PostReceive
+  def self.log(msg)
+    Utils.log("post_receive #{msg}")
+  end
+
+  def self.bash(cmd)
+    Utils.bash(cmd)
+  end
+
+  def self.main
+    File.umask(077)
+    app_id = File.basename(Dir.pwd)
+    repo_path = "#{Dir.pwd}/"
+    meta_path = "/tmp/#{app_id}_push_metadata.yml"
+    archive_path = "/tmp/#{app_id}_stow.tgz"
+    log("main at=start app_id=#{app_id}")
+    return unless YAML.load_file(meta_path)["stow_repo"]
+    begin
+      start = Time.now
+      log("archive at=start app_id=#{app_id}");
+      Utils.bash("cd #{repo_path} && tar cfz #{archive_path} .")
+      archive_size = File.size(archive_path)
+      log("archive at=finish app_id=#{app_id} bytes=#{archive_size} elapsed=#{Time.now-start}")
+
+      repo_put_url = YAML.load(File.read(meta_path))["repo_put_url"]
+      start = Time.now
+      log("store at=start app_id=#{app_id}")
+      curl_opts = [["max-time", 60], ["write-out", "%{http_code}"], ["data-binary", "@#{archive_path}"],
+                   ["header", "Content-Type:"], ["request", "PUT"], ["url", repo_put_url], ["silent"]]
+      out = Utils.with_conf(curl_opts) { |p| Utils.bash("curl --config #{p}") }
+      raise("slugc_post_receive store at=error app_id=#{app_id} elapsed=#{Time.now-start} out='#{out}'") if (out != "200")
+      log("store at=finish app_id=#{app_id} bytes=#{archive_size} elapsed=#{Time.now-start}")
+    rescue => e
+      log("main at=error app_id=#{app_id} class='#{e.class}' message='#{e.message}'")
+    ensure
+      log("main at=clean app_id=#{app_id}")
+      Utils.bash("rm -rf #{archive_path}")
+    end
+  end
+end
+
+PostReceive.main

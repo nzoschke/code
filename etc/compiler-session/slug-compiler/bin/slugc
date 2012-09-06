@@ -1,0 +1,115 @@
+#!/usr/bin/env ruby
+
+fail("Don't run this as root.") if (Process.euid == 0 or Process.groups.include?(0) or Process.egid == 0)
+
+start = Time.now
+
+require "etc"
+require "optparse"
+require "pathname"
+
+rootpath = Pathname.new($0).realpath.dirname.dirname.to_s
+$LOAD_PATH.unshift "#{rootpath}/lib"
+
+require "slug"
+
+# default args
+stack = nil
+meta_path = nil
+range = "master..master"
+trace = false
+deploy_hooks = false
+repo_dir = nil
+input_tar = nil
+output_slug = nil
+output_dir = nil
+output_release = nil
+
+# parse args
+ARGV.options do |o|
+  o.set_summary_indent("  ")
+  o.banner =    "Usage: bin/slugc [OPTIONS]"
+  o.define_head "Compile a git repository into a slug.\n\nOptions:"
+  o.on("-s", "--stack=val",                "Stack of app")                       { |v| stack = v }
+  o.on("-m", "--meta=val",                 "Path to meta YAML file")             { |v| meta_path = v }
+  o.on("-r", "--range=val",                "Update slug since SHA")              { |v| range = v }
+  o.on("-d", "--deploy-hooks",             "Run deploy hooks")                   { |v| deploy_hooks = true }
+  o.on("-t", "--trace",                    "Backtrace on error")                 { |v| trace = true }
+  o.on("-o", "--output-slug=slug_file",    "Compile to a squashfs slug")         { |v| output_slug = v }
+  o.on("-O", "--output-dir=slug_dir",      "Compile to a dir instead of slug")   { |v| output_dir = v }
+  o.on("-l", "--output-release=rel_file",  "Path to release YAML file")          { |v| output_release = v}
+  o.on("-p", "--repo-dir=val",             "Specify repo directory")             { |v| repo_dir = v }
+  o.on("-i", "--input-tar=proj_file",      "Specify project tar file")           { |v| input_tar = v; repo_dir = "" }
+  o.separator("")
+  o.on_tail("-h", "--help",                "Show this help message.")            { puts o; exit }
+  o.parse!
+end
+
+
+
+# determine range of changes
+prev, head =
+  if range =~ /\.\./
+    range.split("..", 2)
+  else
+    [range, "master"]
+  end
+prev = "0" * 40  if (prev.nil? || prev.empty?)
+head = "master"  if (head.nil? || head.empty?)
+
+# compile the slug
+slug = nil
+begin
+  meta = meta_path ? YAML.load(File.read(meta_path)) : {"stack" => stack}
+  slug = Slug.new(:head => head, :prev => prev, :repo_dir => repo_dir, :input_tar => input_tar, :build_dir => output_dir, :slug_file => output_slug, :release_file => output_release, :meta => meta)
+  slug.log("bin at=start")
+  slug.lock do
+    slug.userlog("Slug compilation started")
+    if output_dir
+      begin
+        slug.compile
+      ensure
+        Utils.bash("rm -rf #{slug.buildpack_dir}")
+      end
+      puts("\nCompiled to directory #{slug.build_dir}")
+    elsif output_slug
+      begin
+        slug.compile
+        slug.archive
+        puts("\nCompiled to slug #{output_slug}")
+      ensure
+        Utils.bash("rm -rf #{slug.build_dir} #{slug.buildpack_dir}")
+      end
+    else
+      begin
+        slug.compile
+        slug.archive
+        slug.release(deploy_hooks)
+      ensure
+        Utils.bash("chmod -R a+w #{slug.build_dir}")
+        Utils.bash("rm -rf #{slug.build_dir} #{slug.buildpack_dir}")
+        Utils.bash("rm -f #{slug.slug_file}")
+      end
+    end
+    slug.log("bin at=finish elapsed=#{Time.now - start}")
+    slug.userlog("Slug compilation finished")
+  end
+rescue Slug::CompileError => e
+  Utils.message(" !     Heroku push rejected, #{e.message}\n\n")
+  slug.log("bin at=fail elapsed=#{Time.now - start} message='#{e.message}'")
+  slug.userlog("Slug compilation failed: #{e.message}")
+  exit(1)
+rescue Object => e
+  msg = "\n"
+  msg << " !     Heroku push rejected due to an unrecognized error.\n"
+  msg << " !     We've been notified, see http://support.heroku.com if the problem persists.\n"
+  msg << "\n\n"
+  Utils.message(msg)
+  if slug
+    slug.log_error("bin at=error elapsed=#{Time.now - start} class='#{e.class}' message='#{e.message}' trace='#{e.backtrace[0..3].join(",")}'")
+    slug.userlog("Slug compilation failed: unrecognized error")
+  else
+    Utils.log_error("bin at=error elapsed=#{Time.now - start} class='#{e.class}' message='#{e.message}' trace='#{e.backtrace[0..3].join(",")}'")
+  end
+  trace ? raise : exit(1)
+end
