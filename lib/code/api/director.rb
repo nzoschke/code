@@ -176,6 +176,16 @@ module Code
         redis.del @key, @reply_key
         "ok"
       end
+
+      get "/session/:sid/release" do
+        verify_session!
+        route = redis.hgetall @key
+        puts route.inspect
+
+        heroku = Heroku::API.new(:api_key => route["api_key"])
+        r = heroku.request(path: "/apps/#{route["app_name"]}/releases/new", method: :get)
+        [r.status, r.headers, r.body.to_json]
+      end
     end
   end
 end

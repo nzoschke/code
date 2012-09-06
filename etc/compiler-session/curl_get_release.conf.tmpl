@@ -1,0 +1,5 @@
+output    = "$DEST_DIR/push_metadata.json"
+request   = "GET"
+silent    = "true"
+url       = "$CALLBACK_URL/release"
+write-out = "%{http_code}"
