@@ -13,7 +13,7 @@ GEM
     heroku-api (0.2.6)
       excon (~> 0.14.0)
     kgio (2.7.4)
-    rack (1.4.1)
+    rack (1.6.12)
     rack-protection (1.2.0)
       rack
     raindrops (0.10.0)
